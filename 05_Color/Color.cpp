@@ -16,7 +16,7 @@
 IDXGISwapChain* SwapChain;
 ID3D11Device* d3d11Device;					// 用于检测显示适配器功能和分配资源
 ID3D11DeviceContext* d3d11DevCon;			// 用于设置管线状态, 将资源绑定到图形管线和生成渲染命令
-ID3D11RenderTargetView* renderTargetView;
+ID3D11RenderTargetView* renderTargetView;	// 渲染目标视图(资源不能直接绑定到一个管线阶段, 必须为资源创建资源视图, 然后绑定到不同的管线阶段)
 
 ID3D11Buffer* triangleVertBuffer;
 ID3D11VertexShader* VS;
@@ -54,18 +54,24 @@ LRESULT CALLBACK WndProc(HWND hWnd,
 struct Vertex {
 	Vertex() {}
 	Vertex(float x, float y, float z,
-		   float r, float g, float b, float a)
-		: pos(x, y, z), color(r, g, b, a)
+		   float r, float g, float b, float a,
+		   float rr, float gg, float bb, float aa)
+		: pos(x, y, z), color(r, g, b, a), color2(rr, gg, aa, bb)
 	{
 	}
 
 	XMFLOAT3 pos;
 	XMFLOAT4 color;
+	XMFLOAT4 color2;
 };
 
+// Instead of naming the 2nd color COLOR2 I changed the names in COLOR_ZERO and COLOR_ONE. 
+// A name containing a number results in an error on d3d11Device->CreateInputLayout. 
+// Without any numbers all works fine.
 D3D11_INPUT_ELEMENT_DESC layout[] = {
 	{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-	{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+	{"COLOR_ZERO", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+	{"COLOR_ONE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
 };
 UINT numElements = ARRAYSIZE(layout); // hold the size of our input layout array
 
@@ -171,7 +177,7 @@ bool InitializeWindow(HINSTANCE hInstance,
 
 bool InitializeDirect3d11App(HINSTANCE hInstance)
 {
-	//Create Device and Context (+ DX11 龙书中译 P63)
+	// Create Device and Context (+ DX11 龙书中译 P63)
 	UINT createDeviceFlags = 0;
 #if defined(DEBUG) || defined(_DEBUG)
 	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -194,21 +200,19 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 				   TEXT("D3D11CreateDevice"), MB_OK);
 		return 0;
 	}
-
 	if(featureLevel != D3D_FEATURE_LEVEL_11_0)
 	{
 		MessageBox(NULL, L"Direct3D FeatureLevel 11 unsupported.", 0, 0);
 		return 0;
 	}
 
-	//Check MSAA (+ DX11 龙书中译 P65)
+	// Check MSAA (+ DX11 龙书中译 P65)
 	UINT m4xMsaaQuality;
 	d3d11Device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m4xMsaaQuality); // 如果纹理格式和采样数量的组合不被设备支持, 则该方法返回 0
 	assert(m4xMsaaQuality > 0);
 
-	//Describe our back buffer
+	// Describe our back buffer
 	DXGI_MODE_DESC bufferDesc;
-
 	ZeroMemory(&bufferDesc, sizeof(DXGI_MODE_DESC));
 
 	bufferDesc.Width = Width;
@@ -219,9 +223,8 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 	bufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED; // describe the manner in which the rasterizer will render onto a surface
 	bufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED; // explain how an image is stretched to fit a monitors resolution
 
-	//Describe our SwapChain
+	// Describe our SwapChain
 	DXGI_SWAP_CHAIN_DESC swapChainDesc;
-
 	ZeroMemory(&swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));
 
 	swapChainDesc.BufferDesc = bufferDesc; // 描述所要创建的后台缓冲区的属性
@@ -243,55 +246,65 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // 让显卡驱动程序选择最高效的显示模式
 	swapChainDesc.Flags = 0;
 
-	//Create our SwapChain (<-> DX11 龙书中译 P68)
+	// Create our SwapChain (<-> DX11 龙书中译 P68)
 	IDXGIDevice * dxgiDevice = 0;
-	d3d11Device->QueryInterface(__uuidof(IDXGIDevice),(void**)&dxgiDevice);
+	hr = d3d11Device->QueryInterface(__uuidof(IDXGIDevice),(void**)&dxgiDevice);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("d3d11Device->QueryInterface"), MB_OK);
+		return 0;
+	}
 	IDXGIAdapter* dxgiAdapter = 0;
-	dxgiDevice->GetParent(__uuidof(IDXGIAdapter),(void**) &dxgiAdapter);
+	hr= dxgiDevice->GetParent(__uuidof(IDXGIAdapter),(void**) &dxgiAdapter);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("dxgiDevice->GetParent"), MB_OK);
+		return 0;
+	}
 	// 获得 IDXGIFactory 接口
 	IDXGIFactory* dxgiFactory = 0;
-	dxgiAdapter->GetParent(__uuidof(IDXGIFactory), (void**)&dxgiFactory);
+	hr = dxgiAdapter->GetParent(__uuidof(IDXGIFactory), (void**)&dxgiFactory);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("dxgiAdapter->GetParent"), MB_OK);
+		return 0;
+	}
 	// 现在，创建交换链
 	dxgiFactory->CreateSwapChain(d3d11Device, &swapChainDesc, &SwapChain);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("dxgiFactory->CreateSwapChain"), MB_OK);
+		return 0;
+	}
 	// 释放 COM 接口
 	dxgiDevice->Release();
 	dxgiAdapter->Release();
 	dxgiFactory->Release();
 
-	//此方法同时创建Device, DeviceContext, 和 SwapChain
-	//因为需要先用到 d3d11Device 去查询多重采样质量级别用以设置 SwapChain, 故学习龙书中的方式, 分开创建
-	//hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, NULL, NULL,
-	//								   D3D11_SDK_VERSION, &swapChainDesc, &SwapChain, &d3d11Device, NULL, &d3d11DevCon);
-
-	if(FAILED(hr))
-	{
-		MessageBox(NULL, DXGetErrorDescription(hr),
-				   TEXT("D3D11CreateDeviceAndSwapChain"), MB_OK);
-		return 0;
-	}
-
-	//Create our BackBuffer
-	ID3D11Texture2D* BackBuffer;
-	hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
+	// 为后台缓冲区创建一个渲染目标视图 (<-> DX11 龙书中译 P69)
+	ID3D11Texture2D* backBuffer; 
+	hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backBuffer)); // 获取一个交换链的后台缓冲区指针
 	if(FAILED(hr))
 	{
 		MessageBox(NULL, DXGetErrorDescription(hr),
 				   TEXT("SwapChain->GetBuffer"), MB_OK);
 		return 0;
 	}
-
-	//Create our Render Target View
-	hr = d3d11Device->CreateRenderTargetView(BackBuffer, NULL, &renderTargetView);
-	BackBuffer->Release(); // now we don't need the backbuffer anymore, we can release it
+	hr = d3d11Device->CreateRenderTargetView(backBuffer, 0, &renderTargetView); // 创建渲染目标视图
 	if(FAILED(hr))
 	{
 		MessageBox(NULL, DXGetErrorDescription(hr),
 				   TEXT("d3d11Device->CreateRenderTargetView"), MB_OK);
 		return 0;
 	}
+	backBuffer->Release(); // now we don't need the backbuffer anymore, we can release it
 
-	//Set our Render Target
-	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, NULL); // bind the render target view to the output merger stage of the pipeline
+	// 将视图绑定到输出合并阶段 Output Merger Stage (<-> DX11 龙书中译 P71)
+	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, 0);
 
 	return true;
 }
@@ -315,8 +328,19 @@ bool InitScene()
 {
 	// Compile Shader from shader file
 	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_5_0", 0, 0, 0, &VS_Buffer, 0, 0);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("D3DX11CompileFromFile"), MB_OK);
+		return 0;
+	}
 	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_5_0", 0, 0, 0, &PS_Buffer, 0, 0);
-
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("D3DX11CompileFromFile"), MB_OK);
+		return 0;
+	}
 	// Create the Shader Objects
 	hr = d3d11Device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
 	if(FAILED(hr))
@@ -338,11 +362,18 @@ bool InitScene()
 	d3d11DevCon->PSSetShader(PS, 0, 0);
 
 	// Create the vertex buffer, D3D11_BUFFER_DESC + D3D11_SUBRESOURCE_DATA -> ID3D11Buffer 
+	//Vertex v[] =
+	//{
+	//	Vertex(0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),
+	//	Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
+	//	Vertex(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),
+	//};
+
 	Vertex v[] =
 	{
-		Vertex(0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),
-		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
-		Vertex(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),
+		Vertex(0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.5f),
+		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.5f),
+		Vertex(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.5f),
 	};
 
 	D3D11_BUFFER_DESC vertexBufferDesc;
@@ -397,6 +428,8 @@ bool InitScene()
 	viewport.TopLeftY = 0;
 	viewport.Width = Width;
 	viewport.Height = Height;
+	viewport.MinDepth = 0;
+	viewport.MaxDepth = 1;
 
 	// Set the Viewport
 	d3d11DevCon->RSSetViewports(1, &viewport);
