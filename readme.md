@@ -1,12 +1,12 @@
 # DirectX 11
 
-²Î¿¼Á´½Ó:
+å‚è€ƒé“¾æ¥:
 
 - https://www.braynzarsoft.net/viewtutorial/q16390-braynzar-soft-directx-11-tutorials
 
 ## Pragrammable Graphics Rendering Pipeline
 
-²Î¿¼Á´½Ó
+å‚è€ƒé“¾æ¥
 
 - https://docs.microsoft.com/en-us/windows/desktop/direct3d11/overviews-direct3d-11-graphics-pipeline
 - https://www.braynzarsoft.net/viewtutorial/q16390-4-begin-drawing
