@@ -14,20 +14,22 @@
 
 //Global Declarations//
 IDXGISwapChain* SwapChain;
-ID3D11Device* d3d11Device;					// 用于检测显示适配器功能和分配资源
-ID3D11DeviceContext* d3d11DevCon;			// 用于设置管线状态, 将资源绑定到图形管线和生成渲染命令
-ID3D11RenderTargetView* renderTargetView;	// 渲染目标视图(资源不能直接绑定到一个管线阶段, 必须为资源创建资源视图, 然后绑定到不同的管线阶段)
+ID3D11Device* d3d11Device;                  // 用于检测显示适配器功能和分配资源
+ID3D11DeviceContext* d3d11DevCon;           // 用于设置管线状态, 将资源绑定到图形管线和生成渲染命令
+ID3D11RenderTargetView* renderTargetView;   // 渲染目标视图(资源不能直接绑定到一个管线阶段, 必须为资源创建资源视图, 然后绑定到不同的管线阶段)
 ID3D11DepthStencilView* depthStencilView;
 ID3D11Texture2D* depthStencilBuffer;
-
 ID3D11Buffer* squareVertBuffer;
 ID3D11Buffer* squareIndexBuffer;
 ID3D11Buffer* cbPerObjectBuffer; // store our constant buffer variables in (WVP matrix) to send to the actual constant buffer in the effect file
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-ID3D10Blob* VS_Buffer; // hold the information about vertex shader, use this buffer to create the actual shader
-ID3D10Blob* PS_Buffer; // hold the information about pixel shader, use this buffer to create the actual shader
+ID3D10Blob* VS_Buffer;
+ID3D10Blob* PS_Buffer;
 ID3D11InputLayout* vertLayout;
+ID3D11RasterizerState* WireFrame; // Render State, to make object wireframe
+ID3D11RasterizerState* Solid; // Render State, to make object solid
+
 
 LPCTSTR WndClassName = L"firstwindow";
 HWND hwnd = NULL;
@@ -53,8 +55,8 @@ XMMATRIX Translation;
 float rot = 0.01f; // keep track of rotation
 
 //Function Prototypes//
-bool InitializeDirect3d11App(HINSTANCE hInstance);	// initialize direct3d
-void ReleaseObjects();	// release the objects we don't need to prevent memory leaks
+bool InitializeDirect3d11App(HINSTANCE hInstance);  // initialize direct3d
+void ReleaseObjects();  // release the objects we don't need to prevent memory leaks
 bool InitScene(); // set up
 void UpdateScene(); // change scene on a per-frame basis
 void DrawScene(); // draw scene to the screen, update every frame
@@ -95,7 +97,7 @@ D3D11_INPUT_ELEMENT_DESC layout[] = {
 };
 UINT numElements = ARRAYSIZE(layout); // hold the size of our input layout array
 
-int WINAPI WinMain(HINSTANCE hInstance,	//Main windows function
+int WINAPI WinMain(HINSTANCE hInstance, //Main windows function
 				   HINSTANCE hPrevInstance,
 				   LPSTR lpCmdLine,
 				   int nShowCmd)
@@ -107,14 +109,14 @@ int WINAPI WinMain(HINSTANCE hInstance,	//Main windows function
 		return 0;
 	}
 
-	if(!InitializeDirect3d11App(hInstance))	//Initialize Direct3D
+	if(!InitializeDirect3d11App(hInstance)) //Initialize Direct3D
 	{
 		MessageBox(0, L"Direct3D Initialization - Failed",
 				   L"Error", MB_OK);
 		return 0;
 	}
 
-	if(!InitScene())	//Initialize our scene
+	if(!InitScene())    //Initialize our scene
 	{
 		MessageBox(0, L"Scene Initialization - Failed",
 				   L"Error", MB_OK);
@@ -172,7 +174,7 @@ bool InitializeWindow(HINSTANCE hInstance,
 	hwnd = CreateWindowEx(
 		NULL,
 		WndClassName,
-		L"Transformations",
+		L"RenderStates",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		width, height,
@@ -347,7 +349,7 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 	d3d11Device->CreateDepthStencilView(depthStencilBuffer, 0, &depthStencilView);
 
 	// 将视图绑定到输出合并阶段
-	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, depthStencilView); // depth buffer is set to do the default depth tests
 
 	return true;
 }
@@ -369,6 +371,8 @@ void ReleaseObjects()
 	VS_Buffer->Release();
 	PS_Buffer->Release();
 	vertLayout->Release();
+	WireFrame->Release();
+	Solid->Release();
 }
 
 bool InitScene()
@@ -539,7 +543,6 @@ bool InitScene()
 	cbbd.CPUAccessFlags = 0;
 	cbbd.MiscFlags = 0;
 	cbbd.StructureByteStride = 0;
-
 	hr = d3d11Device->CreateBuffer(&cbbd, 0, &cbPerObjectBuffer);
 	if(FAILED(hr))
 	{
@@ -558,6 +561,34 @@ bool InitScene()
 
 	// Set the Project matrix
 	camProjection = XMMatrixPerspectiveFovLH(0.4f * 3.14f, (float)Width / Height, 1.0f, 1000.0f);
+
+	// Describe the (Rasterizer) Render State
+	D3D11_RASTERIZER_DESC wfdesc;
+	ZeroMemory(&wfdesc, sizeof(D3D11_RASTERIZER_DESC));
+
+	wfdesc.FillMode = D3D11_FILL_WIREFRAME;
+	wfdesc.CullMode = D3D11_CULL_NONE;
+	wfdesc.MultisampleEnable = TRUE; // 开启多重采样抗锯齿, 当 enable4xMsaa 也为 true 时有效.
+	hr = d3d11Device->CreateRasterizerState(&wfdesc, &WireFrame);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("d3d11Device->CreateRasterizerState"), MB_OK);
+		return 0;
+	}
+
+	wfdesc.FillMode = D3D11_FILL_SOLID;
+	wfdesc.CullMode = D3D11_CULL_BACK;
+	hr = d3d11Device->CreateRasterizerState(&wfdesc, &Solid);
+	if(FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+				   TEXT("d3d11Device->CreateRasterizerState"), MB_OK);
+		return 0;
+	}
+
+	// Set the Rasterizer State
+	//d3d11DevCon->RSSetState(WireFrame);
 
 	return true;
 }
@@ -582,7 +613,6 @@ void UpdateScene()
 
 	// Set cube1's world space use the transformations
 	cube1World = Scale * Translation * Rotation; // Doing translation before rotation gives an orbit effect (公转)
-	//cube1World = Scale * Rotation * Translation; // Doing rotation before translation gives an spinning effect (自转)
 
 	 // Reset cube2World
 	cube2World = XMMatrixIdentity();
@@ -610,6 +640,7 @@ void DrawScene()
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, 0, &cbPerObj, 0, 0);
 	d3d11DevCon->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	// Draw the first cube
+	d3d11DevCon->RSSetState(WireFrame);
 	d3d11DevCon->DrawIndexed(36, 0, 0);
 
 	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
@@ -618,6 +649,7 @@ void DrawScene()
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, 0, &cbPerObj, 0, 0);
 	d3d11DevCon->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	// Draw the second cube
+	d3d11DevCon->RSSetState(Solid);
 	d3d11DevCon->DrawIndexed(36, 0, 0);
 
 	// Present the backbuffer to the screen
