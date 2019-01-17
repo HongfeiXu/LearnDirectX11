@@ -24,7 +24,7 @@ The rendering pipeline is the set of steps direct3d uses to create a 2d image ba
 9. Pixel Shader (PS) Stage
 10. Output Merger (OM) Stage
 
-![](images\pipeline.png)
+![](images/pipeline.png)
 
 ## World, View and Local Spaces
 
@@ -34,8 +34,6 @@ The rendering pipeline is the set of steps direct3d uses to create a 2d image ba
 - https://docs.microsoft.com/en-us/windows/desktop/direct3d11/overviews-direct3d-11-resources-buffers-intro
 
 ### Constant Buffers
-
-
 
 A constant buffer is basically a structure in an effect file which holds variables we are able to update from our game code. We can create a constant buffer using the cbuffer type. An example, and the one we will use looks like this:
 
@@ -51,6 +49,8 @@ Constant buffers should be seperated by how often they are updated. This way we 
 1. per scene (call the buffer only once per scene, such as lighting that does not change throughout the scene)
 2. per frame (such as lighting that does change position or something every frame, like the sun moving across the sky)
 3. per object (Like what we will do. We update the WVP per object, since each object has a different World space, or position, rotation, or scaling)
+
+
 
 
 
