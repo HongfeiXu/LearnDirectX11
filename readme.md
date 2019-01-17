@@ -50,8 +50,23 @@ Constant buffers should be seperated by how often they are updated. This way we 
 2. per frame (such as lighting that does change position or something every frame, like the sun moving across the sky)
 3. per object (Like what we will do. We update the WVP per object, since each object has a different World space, or position, rotation, or scaling)
 
+## Blending
+
+在第12节展示了渲染多个透明物体的一种常规方法, 
+
+1. 渲染不透明物体
+2. 对透明物体按照距离排序
+3. 由远及近渲染每个透明物体, 每个物体先渲染 back face, 在渲染 front face.
+
+## D3D 与 OGL 的不同点
 
 
+1. 左手系. 向量叉乘按照左手螺旋定则.
+2. 纹理坐标(0, 0)在左上角.
+3. 默认向量表示为行向量, 矩阵右乘向量.
+4. 矩阵传入着色器需要转置. (为啥??? ) [read1](https://blog.csdn.net/weiyuxinyuan/article/details/78295969), [read2](https://docs.microsoft.com/zh-cn/windows/desktop/direct3dhlsl/dx-graphics-hlsl-per-component-math)
+	
+5. 默认情况下, d3d cull counter-clockwise faces. 即, 照相机看到的三角形按照顺时针顶点定义.
 
 
 
