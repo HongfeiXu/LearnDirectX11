@@ -4,7 +4,8 @@
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dx11.lib")
 #pragma comment(lib, "d3dx10.lib")
-#pragma comment(lib, "DXErr.lib")
+#pragma comment(lib, "DXErr.lib") // the dxerr.lib is no longer compatible with Visual Studio 2015 and later Visual Studio..
+#pragma comment(lib, "legacy_stdio_definitions.lib") // so we link this, https://stackoverflow.com/questions/31053670/unresolved-external-symbol-vsnprintf-in-dxerr-lib
 
 #include <windows.h>
 #include <d3d11.h>
@@ -728,17 +729,13 @@ void DrawScene()
 	// Transparency Depth Ordering
 	XMVECTOR cubePos = XMVectorZero();
 	cubePos = XMVector3TransformCoord(cubePos, g_World1);
-	float distX = XMVectorGetX(cubePos) - XMVectorGetX(g_CamPosition);
-	float distY = XMVectorGetY(cubePos) - XMVectorGetY(g_CamPosition);
-	float distZ = XMVectorGetZ(cubePos) - XMVectorGetZ(g_CamPosition);
-	float cube1Dist = distX * distX + distY * distY + distZ * distZ;
+	auto temp = cubePos - g_CamPosition;
+	float cube1Dist = XMVectorGetX(XMVector3LengthSq(temp));
 
 	cubePos = XMVectorZero();
 	cubePos = XMVector3TransformCoord(cubePos, g_World2);
-	distX = XMVectorGetX(cubePos) - XMVectorGetX(g_CamPosition);
-	distY = XMVectorGetY(cubePos) - XMVectorGetY(g_CamPosition);
-	distZ = XMVectorGetZ(cubePos) - XMVectorGetZ(g_CamPosition);
-	float cube2Dist = distX * distX + distY * distY + distZ * distZ;
+	temp = cubePos - g_CamPosition;
+	float cube2Dist = XMVectorGetX(XMVector3LengthSq(temp));
 
 	if(cube1Dist < cube2Dist)	// the further one should be rendered first
 	{

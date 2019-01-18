@@ -4,6 +4,13 @@
 
 - https://www.braynzarsoft.net/viewtutorial/q16390-braynzar-soft-directx-11-tutorials
 
+## 实验环境
+
+Visual Studio Community 2017 + [Microsoft DirectX SDK (June 2010)](https://www.microsoft.com/en-us/download/details.aspx?id=6812)
+
+注1: [Where is the DirectX SDK?](https://docs.microsoft.com/zh-cn/windows/desktop/directx-sdk--august-2009-)
+
+
 ## Pragrammable Graphics Rendering Pipeline
 
 参考链接
