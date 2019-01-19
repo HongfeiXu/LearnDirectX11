@@ -37,6 +37,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "16_SimpleLighting", "16_Sim
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "17_PointLights", "17_PointLights\17_PointLights.vcxproj", "{3F2A29B0-0749-40E0-8936-4D6F4A01AF45}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "18_DirectInput", "18_DirectInput\18_DirectInput.vcxproj", "{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -181,6 +183,14 @@ Global
 		{3F2A29B0-0749-40E0-8936-4D6F4A01AF45}.Release|x64.Build.0 = Release|x64
 		{3F2A29B0-0749-40E0-8936-4D6F4A01AF45}.Release|x86.ActiveCfg = Release|Win32
 		{3F2A29B0-0749-40E0-8936-4D6F4A01AF45}.Release|x86.Build.0 = Release|Win32
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Debug|x64.ActiveCfg = Debug|x64
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Debug|x64.Build.0 = Debug|x64
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Debug|x86.ActiveCfg = Debug|Win32
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Debug|x86.Build.0 = Debug|Win32
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x64.ActiveCfg = Release|x64
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x64.Build.0 = Release|x64
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x86.ActiveCfg = Release|Win32
+		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -78,6 +78,12 @@ Surface sharing: This way, we can use direct2d with a direct3d 10.1 device to re
 - https://www.braynzarsoft.net/viewtutorial/q16390-14-simple-font
 - https://www.cnblogs.com/X-Jun/p/9106518.html
 
+## Direct Input
+
+使用 Direct Input API 处理用户输入.
+
+Direct Input uses relative mouse coordinates. What this means is it detects how much the mouse has moved since the last time it was checked.
+
 ## D3D 与 OGL 的不同点
 
 
