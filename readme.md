@@ -63,7 +63,20 @@ Constant buffers should be seperated by how often they are updated. This way we 
 
 1. 渲染不透明物体
 2. 对透明物体按照距离排序
-3. 由远及近渲染每个透明物体, 每个物体先渲染 back face, 在渲染 front face.
+3. 由远及近渲染每个透明物体, 每个物体先渲染 back face, 再渲染 front face.
+
+## Simple Font
+
+Not Simple...
+
+通过实现 Direct2D 与 Direct3D 互操作性, 然后配合 DWrite 在程序写入文字. 在系统不支持Direct3D 11.1的情况下, DXGI的版本为1.1. 而DXGI1.1只能通过Direct3D 10.1进行互操作. 所以这里又使用了 Surface Sharing 机制, 在 D3D11 中使用 D2D.
+
+Surface sharing: This way, we can use direct2d with a direct3d 10.1 device to render to a surface, then using the direct3d 11 device, render that shared surface (which direct3d 10.1 and direct2d renders to) onto a square in screen space which overlays the entire scene.
+
+参考链接:
+
+- https://www.braynzarsoft.net/viewtutorial/q16390-14-simple-font
+- https://www.cnblogs.com/X-Jun/p/9106518.html
 
 ## D3D 与 OGL 的不同点
 

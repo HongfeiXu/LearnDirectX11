@@ -4,7 +4,8 @@
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dx11.lib")
 #pragma comment(lib, "d3dx10.lib")
-#pragma comment(lib, "DXErr.lib")
+#pragma comment(lib, "DXErr.lib") // the dxerr.lib is no longer compatible with Visual Studio 2015 and later Visual Studio..
+#pragma comment(lib, "legacy_stdio_definitions.lib") // so we link this, https://stackoverflow.com/questions/31053670/unresolved-external-symbol-vsnprintf-in-dxerr-lib
 
 #include <windows.h>
 #include <d3d11.h>
@@ -54,9 +55,10 @@ ID3D10Blob*										g_pPS_Buffer; // hold the information about pixel shader, u
 ID3D11InputLayout*								g_pVertLayout;
 ID3D11Buffer*									g_pCBPerObjectBuffer; // store our constant buffer variables to send to the actual constant buffer in the effect file
 CBPerObject										g_CBPerObj;
-ID3D11ShaderResourceView*						g_pCube1Texture;		// 当把一个纹理作为一个着色器资源时, 需要创建着色器视图
-ID3D11ShaderResourceView*						g_pCube2Texture;		// 当把一个纹理作为一个着色器资源时, 需要创建着色器视图
+ID3D11ShaderResourceView*						g_pCubeTexture; // 当把一个纹理作为一个着色器资源时, 需要创建着色器视图
 ID3D11SamplerState*								g_pCubesTexSamplerState;
+ID3D11RasterizerState*							g_pNoCull;
+
 
 LPCTSTR						g_WndClassName = L"firstwindow";
 HWND						g_hWnd = NULL;
@@ -173,7 +175,7 @@ bool InitializeWindow(HINSTANCE hInstance,
 	g_hWnd = CreateWindowEx(
 		NULL,
 		g_WndClassName,
-		L"Textures",
+		L"PixelClipping",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		width, height,
@@ -585,15 +587,7 @@ bool InitScene()
 	g_Projection = XMMatrixPerspectiveFovLH(0.4f * 3.14f, (float)g_Width / g_Height, 1.0f, 1000.0f);
 
 	// Load the Texture from a file
-	g_hr = D3DX11CreateShaderResourceViewFromFile(g_pd3d11Device, L"seafloor.dds", NULL, NULL, &g_pCube1Texture, NULL);
-	if(FAILED(g_hr))
-	{
-		MessageBox(NULL, DXGetErrorDescription(g_hr),
-				   TEXT("D3DX11CreateShaderResourceViewFromFile"), MB_OK);
-		return 0;
-	}
-
-	g_hr = D3DX11CreateShaderResourceViewFromFile(g_pd3d11Device, L"braynzar.jpg", NULL, NULL, &g_pCube2Texture, NULL);
+	g_hr = D3DX11CreateShaderResourceViewFromFile(g_pd3d11Device, L"WireFence.dds", NULL, NULL, &g_pCubeTexture, NULL);
 	if(FAILED(g_hr))
 	{
 		MessageBox(NULL, DXGetErrorDescription(g_hr),
@@ -611,10 +605,6 @@ bool InitScene()
 	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	sampDesc.MinLOD = 0;
 	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	//sampDesc.BorderColor[0] = 1.0f;
-	//sampDesc.BorderColor[1] = 0.0f;
-	//sampDesc.BorderColor[2] = 0.0f;
-	//sampDesc.BorderColor[3] = 0.0f;
 
 	// Create Sampler State
 	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pCubesTexSamplerState);
@@ -622,6 +612,21 @@ bool InitScene()
 	{
 		MessageBox(NULL, DXGetErrorDescription(g_hr),
 				   TEXT("d3d11Device->CreateSamplerState"), MB_OK);
+		return 0;
+	}
+
+	// Describe the (Rasterizer) Render State
+	D3D11_RASTERIZER_DESC cmdesc;
+	ZeroMemory(&cmdesc, sizeof(D3D11_RASTERIZER_DESC));
+
+	cmdesc.FillMode = D3D11_FILL_SOLID;
+	cmdesc.CullMode = D3D11_CULL_NONE;
+	cmdesc.MultisampleEnable = TRUE; // 开启多重采样抗锯齿, 当 enable4xMsaa 也为 true 时有效.
+	g_hr = g_pd3d11Device->CreateRasterizerState(&cmdesc, &g_pNoCull);
+	if(FAILED(g_hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(g_hr),
+				   TEXT("d3d11Device->CreateRasterizerState"), MB_OK);
 		return 0;
 	}
 
@@ -676,14 +681,22 @@ void DrawScene()
 									   D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f,
 									   0);  // Clear the depth/stencil view every frame!!!
 
+	// Draw objects that will use backface culling
+	g_pd3d11DevCon->RSSetState(NULL);
+	// ...
+
+	// Draw objects with both faces
+	g_pd3d11DevCon->RSSetState(g_pNoCull);
+
 	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
 	g_WVP = g_World1 * g_View * g_Projection;
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
-	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCube1Texture);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
 	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
-	// Draw the first cube
+	
+	// Draw the first cube, render back face before front face
 	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
 
 	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
@@ -691,8 +704,9 @@ void DrawScene()
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
-	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCube2Texture);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
 	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+
 	// Draw the second cube
 	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
 
@@ -777,12 +791,13 @@ void ReleaseObjects()
 	g_pRenderTargetView->Release();
 	g_pSquareVertBuffer->Release();
 	g_pSquareIndexBuffer->Release();
-	g_pCBPerObjectBuffer->Release();
-	g_pDepthStencilView->Release();
-	g_pDepthStencilBuffer->Release();
 	g_pVS->Release();
 	g_pPS->Release();
 	g_pVS_Buffer->Release();
 	g_pPS_Buffer->Release();
 	g_pVertLayout->Release();
+	g_pDepthStencilView->Release();
+	g_pDepthStencilBuffer->Release();
+	g_pCBPerObjectBuffer->Release();
+	g_pNoCull->Release();
 }

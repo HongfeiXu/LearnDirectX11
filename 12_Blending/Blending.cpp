@@ -177,7 +177,7 @@ bool InitializeWindow(HINSTANCE hInstance,
 	g_hWnd = CreateWindowEx(
 		NULL,
 		g_WndClassName,
-		L"Blending",
+		L"SimpleFont",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		width, height,
@@ -633,7 +633,7 @@ bool InitScene()
 	D3D11_BLEND_DESC blendDesc;
 	ZeroMemory(&blendDesc, sizeof(blendDesc));
 
-	blendDesc.AlphaToCoverageEnable = false;	// ???
+	blendDesc.AlphaToCoverageEnable = false;	// 一种多重采样技术, 在渲染植物叶子或者铁丝网纹理时非常有用
 	blendDesc.IndependentBlendEnable = false;
 	blendDesc.RenderTarget[0] = rtbd;
 
@@ -719,7 +719,7 @@ void DrawScene()
 	float blendFactor[] = { 0.75f, 0.75f, 0.75f, 1.0f };
 
 	// Set the default blend state (no blending) for opaque objects
-	g_pd3d11DevCon->OMSetBlendState(0, 0, 0xffffffff);
+	g_pd3d11DevCon->OMSetBlendState(0, 0, 0xffffffff); // 多重采样最多支持32个采样源, 参数 0xffffffff 表示不屏蔽任何采样员
 
 	// Render opaque objects here //
 
