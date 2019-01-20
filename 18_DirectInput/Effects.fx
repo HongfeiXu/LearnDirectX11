@@ -6,11 +6,17 @@ struct Light
     float3 att;
     float4 ambient;
     float4 diffuse;
+	// ===aha===
+    float4 specular;
+	// ===aha===
 };
 
 cbuffer cbPerFrame
 {
     Light light;
+	// ===aha===
+    float3 camWorldPos;
+	// ===aha===
 };
 
 cbuffer cbPerObject
@@ -50,8 +56,8 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
     float4 matDiffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
     float3 finalAmbient = matDiffuse * light.ambient;
 
-    float3 lightToPixelVec = light.pos - input.worldPos.xyz;
-    float d = length(lightToPixelVec);
+    float3 lightDir = light.pos - input.worldPos.xyz;
+    float d = length(lightDir);
     if (d > light.range)
     {
         return float4(finalAmbient, matDiffuse.a);
@@ -59,15 +65,31 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 
     // diffuse
     float3 finalDiffuse = float3(0.0f, 0.0f, 0.0f);
-    lightToPixelVec /= d;
-    float howMuchLight = dot(lightToPixelVec, input.normal);
+    lightDir /= d;
+    float howMuchLight = dot(lightDir, input.normal);
     if (howMuchLight > 0.0f)
     {
         finalDiffuse += howMuchLight * matDiffuse * light.diffuse;
         finalDiffuse /= light.att[0] + (light.att[1] * d) + (light.att[2] * (d * d));
     }
-    float3 finalColor = saturate(finalAmbient + finalDiffuse);
-    return float4(finalColor, 0.0f);
+
+	// ===aha===
+    float matGloss = 20.0;
+    float4 matSpecular = float4(1.0, 1.0, 1.0, 1.0);
+
+    // specular(Phong)
+    //float3 reflectDir = normalize(reflect(-lightDir, input.normal));
+    //float3 viewDir = normalize(camWorldPos - input.worldPos.xyz);
+    //float3 finalSpecular = matSpecular * light.specular * pow(saturate(dot(reflectDir, viewDir)), matGloss);
+
+    // specular(Blinn-Phong)
+    float3 viewDir = normalize(camWorldPos - input.worldPos.xyz);
+    float3 halfDir = normalize(viewDir + lightDir);
+    float3 finalSpecular = matSpecular * light.specular * pow(saturate(dot(halfDir, input.normal)), matGloss);
+	// ===aha===
+
+    float3 finalColor = saturate(finalAmbient + finalDiffuse + finalSpecular);
+    return float4(finalColor, matDiffuse.a);
 }
 
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET

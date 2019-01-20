@@ -73,11 +73,18 @@ struct Light
 	float pad2;
 	XMFLOAT4 ambient;
 	XMFLOAT4 diffuse;
+	// ===aha===
+	XMFLOAT4 specular;
+	// ===aha===
 };
 
 struct CBPerFrame
 {
 	Light light;
+	// ===aha===
+	XMFLOAT3 camWorldPos;
+	float pad;
+	// ===aha===
 };
 
 struct Vertex {
@@ -882,6 +889,9 @@ bool InitScene()
 	g_light.att = XMFLOAT3(0.0f, 0.2f, 0.0f);
 	g_light.ambient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
 	g_light.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	// ===aha===
+	g_light.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	// ===aha===
 
 	return true;
 }
@@ -1131,6 +1141,9 @@ void DrawScene()
 
 	///////////////**************new**************////////////////////
 	g_CBPerFrame.light = g_light;
+	// ===aha===
+	XMStoreFloat3(&g_CBPerFrame.camWorldPos, g_CamPosition);
+	// ===aha===
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerFrameBuffer, 0, 0, &g_CBPerFrame, 0, 0);
 	g_pd3d11DevCon->PSSetConstantBuffers(0, 1, &g_pCBPerFrameBuffer);
 
