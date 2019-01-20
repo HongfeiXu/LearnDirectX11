@@ -32,6 +32,7 @@
 #include <D2D1.h>
 #include <sstream>
 #include <dwrite.h>
+#include <string>
 
 ///////////////**************new**************////////////////////
 //--------------------------------------------------------------------------------------
@@ -41,11 +42,11 @@
 #define HR(hrr, description) \
 if(FAILED(hrr))\
 {\
-	MessageBox(NULL, DXGetErrorDescription(hrr), TEXT(description), MB_OK); \
+	MessageBox(NULL, DXGetErrorDescription(hrr), LPCWSTR((std::to_wstring(__LINE__) + std::wstring(L" ") + TEXT(description)).c_str()), MB_OK); \
 	return 0;\
 }
 #else
-#define HR(hrr, description)
+#define HR(hrr, description) ;
 #endif
 ///////////////**************new**************////////////////////
 
