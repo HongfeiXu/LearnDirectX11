@@ -1232,6 +1232,7 @@ void ReleaseObjects()
 	g_pDepthStencilView->Release();
 	g_pDepthStencilBuffer->Release();
 	g_pCBPerObjectBuffer->Release();
+	g_pCubeTexture->Release();
 	///////////////**************new**************////////////////////
 	g_pCBPerFrameBuffer->Release();
 	g_pD2D_PS->Release();

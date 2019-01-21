@@ -1112,6 +1112,7 @@ void ReleaseObjects()
 	g_pCCWcullMode->Release();
 	g_pCWcullMode->Release();
 	g_pNoCullMode->Release();
+	g_pCubeTexture->Release();
 
 	///////////////**************new**************////////////////////
 	d3d101Device->Release();

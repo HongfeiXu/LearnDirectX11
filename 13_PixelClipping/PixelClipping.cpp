@@ -800,4 +800,5 @@ void ReleaseObjects()
 	g_pDepthStencilBuffer->Release();
 	g_pCBPerObjectBuffer->Release();
 	g_pNoCull->Release();
+	g_pCubeTexture->Release();
 }

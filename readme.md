@@ -84,8 +84,11 @@ Surface sharing: This way, we can use direct2d with a direct3d 10.1 device to re
 
 Direct Input uses relative mouse coordinates. What this means is it detects how much the mouse has moved since the last time it was checked.
 
-## D3D 与 OGL 的不同点
+## Skybox
 
+可以使用 Terragen 去制作天空盒所需的六张图片. 然后使用 DirectX Texture Tool 去制作一个 3D Texture.
+
+## D3D 与 OGL 的不同点
 
 1. 左手系. 向量叉乘按照左手螺旋定则.
 2. 纹理坐标(0, 0)在左上角.

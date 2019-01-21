@@ -864,4 +864,5 @@ void ReleaseObjects()
 	g_pTransparency->Release();
 	g_pCCWcullMode->Release();
 	g_pCWcullMode->Release();
+	g_pCubeTexture->Release();
 }

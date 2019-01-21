@@ -418,7 +418,7 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 	swapChainDesc.BufferCount = 1;
 	swapChainDesc.OutputWindow = g_hWnd;
 	///////////////**************new**************////////////////////
-	swapChainDesc.Windowed = false;
+	swapChainDesc.Windowed = true;
 	///////////////**************new**************////////////////////
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 	swapChainDesc.Flags = 0;
@@ -1356,9 +1356,11 @@ void ReleaseObjects()
 	DIMouse->Release();
 	DirectInput->Release();
 
-	///////////////**************new**************////////////////////
 	g_pGroundIndexBuffer->Release();
 	g_pGroundVertBuffer->Release();
+
+	g_pCubeTexture->Release();
+	g_pGroundTexture->Release();
 }
 
 //--------------------------------------------------------------------------------------

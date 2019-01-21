@@ -785,4 +785,6 @@ void ReleaseObjects()
 	g_pVS_Buffer->Release();
 	g_pPS_Buffer->Release();
 	g_pVertLayout->Release();
+	g_pCube1Texture->Release();
+	g_pCube2Texture->Release();
 }
