@@ -6,10 +6,8 @@
 #pragma comment(lib, "d3dx10.lib")
 #pragma comment(lib, "DXErr.lib") // the dxerr.lib is no longer compatible with Visual Studio 2015 and later Visual Studio..
 #pragma comment(lib, "legacy_stdio_definitions.lib") // so we link this, https://stackoverflow.com/questions/31053670/unresolved-external-symbol-vsnprintf-in-dxerr-lib
-///////////////**************new**************////////////////////
 #pragma comment(lib, "dinput8.lib")
 #pragma comment(lib, "dxguid.lib")
-///////////////**************new**************////////////////////
 
 #pragma comment (lib, "D3D10_1.lib")
 #pragma comment (lib, "DXGI.lib")
@@ -23,9 +21,7 @@
 #include <xnamath.h>
 #include <DxErr.h>
 #include <cassert>
-///////////////**************new**************////////////////////
 #include <dinput.h>
-///////////////**************new**************////////////////////
 
 #include <D3D10_1.h>
 #include <DXGI.h>
@@ -34,7 +30,6 @@
 #include <dwrite.h>
 #include <string>
 
-///////////////**************new**************////////////////////
 //--------------------------------------------------------------------------------------
 // Macros
 //--------------------------------------------------------------------------------------
@@ -48,7 +43,6 @@ if(FAILED(hrr))\
 #else
 #define HR(hrr, description) ;
 #endif
-///////////////**************new**************////////////////////
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -67,25 +61,16 @@ struct Light
 	}
 	XMFLOAT3 dir;
 	float pad;
-	// to make a point light
-	XMFLOAT3 pos;
-	float range;
-	XMFLOAT3 att;
-	float pad2;
 	XMFLOAT4 ambient;
 	XMFLOAT4 diffuse;
-	// ===aha===
 	XMFLOAT4 specular;
-	// ===aha===
 };
 
 struct CBPerFrame
 {
 	Light light;
-	// ===aha===
 	XMFLOAT3 camWorldPos;
 	float pad;
-	// ===aha===
 };
 
 struct Vertex {
@@ -112,8 +97,12 @@ ID3D11DeviceContext*							g_pd3d11DevCon;			// 用于设置管线状态, 将资源绑定到图
 ID3D11RenderTargetView*							g_pRenderTargetView;	// 渲染目标视图(资源不能直接绑定到一个管线阶段, 必须为资源创建资源视图, 然后绑定到不同的管线阶段)
 ID3D11DepthStencilView*							g_pDepthStencilView;
 ID3D11Texture2D*								g_pDepthStencilBuffer;
-ID3D11Buffer*									g_pSquareVertBuffer;
-ID3D11Buffer*									g_pSquareIndexBuffer;
+ID3D11Buffer*									g_pCubeVertBuffer;
+ID3D11Buffer*									g_pCubeIndexBuffer;
+///////////////**************new**************////////////////////
+ID3D11Buffer*									g_pGroundVertBuffer;
+ID3D11Buffer*									g_pGroundIndexBuffer;
+///////////////**************new**************////////////////////
 ID3D11VertexShader*								g_pVS;
 ID3D11PixelShader*								g_pPS;
 ID3D10Blob*										g_pVS_Buffer; // hold the information about vertex shader, use this buffer to create the actual shader
@@ -126,12 +115,16 @@ ID3D10Blob*										g_pD2D_PS_Buffer;
 ID3D11Buffer*									g_pCBPerFrameBuffer;
 CBPerFrame										g_CBPerFrame; // send this structure to the Pixel Shader constant buffers
 Light											g_light;
-ID3D11ShaderResourceView*						g_pCubeTexture;		// 当把一个纹理作为一个着色器资源时, 需要创建着色器视图
+ID3D11ShaderResourceView*						g_pCubeTexture;
 ID3D11SamplerState*								g_pCubesTexSamplerState;
+///////////////**************new**************////////////////////
+ID3D11ShaderResourceView*						g_pGroundTexture;
+ID3D11SamplerState*								g_pGroundTexSamplerState;
+///////////////**************new**************////////////////////
 ID3D11BlendState*								g_pTransparency; // for render text
-ID3D11RasterizerState*							g_pCCWcullMode;	// counter clockwise culling
-ID3D11RasterizerState*							g_pCWcullMode;	// clockwise culling
-ID3D11RasterizerState*							g_pNoCullMode;	// no culling
+ID3D11RasterizerState*							g_pCCWcullMode;	 // counter clockwise culling
+ID3D11RasterizerState*							g_pCWcullMode;	 // clockwise culling
+ID3D11RasterizerState*							g_pNoCullMode;	 // no culling
 
 // Simple Font
 ID3D10Device1*									d3d101Device;
@@ -148,30 +141,22 @@ IDWriteFactory*									DWriteFactory;
 IDWriteTextFormat*								TextFormat;
 std::wstring									printText;
 
-///////////////**************new**************////////////////////
 // Input
 IDirectInputDevice8*							DIKeyboard;
 IDirectInputDevice8*							DIMouse;
-
 DIMOUSESTATE									mouseLastState;
 LPDIRECTINPUT8									DirectInput;
-
-float rotx = 0;
-float rotz = 0;
-float scaleX = 1.0f;
-float scaleY = 1.0f;
-
-XMMATRIX RotationX;
-XMMATRIX RotationZ;
-///////////////**************new**************////////////////////
 
 // Window
 LPCTSTR						g_WndClassName = L"firstwindow";
 HWND						g_hWnd = NULL;
 HRESULT						g_hr;
 const int					g_Width = 800;
-const int					g_Height = 800;
+const int					g_Height = 600;
 bool						g_Enable4xMsaa = true;
+float						g_rotx = 0;		// To rotate Cube1
+float						g_rotz = 0;		// To rotate Cube1
+float						g_Fov = 0.4f;	// To modify fov of camera
 
 // Transform
 XMMATRIX	 				g_WVP;
@@ -179,26 +164,44 @@ XMMATRIX	 				g_World1;
 XMMATRIX	 				g_World2;
 XMMATRIX	 				g_View;
 XMMATRIX	 				g_Projection;
-float						g_Fov = 0.4f;	// modify fov of camera
+XMMATRIX	 				g_Rotation;		// UpdateScene()
+XMMATRIX	 				g_Scale;		// UpdateScene()
+XMMATRIX	 				g_Translation;	// UpdateScene()
+float	 					g_Rot = 0.01f;	// keep track of rotation
+XMMATRIX					g_RotationX;		// To rotate Cube1
+XMMATRIX					g_RotationZ;		// To rotate Cube1
+
+// Timer
+double			countsPerSecond = 0.0;
+__int64			CounterStart = 0;
+int				frameCount = 0;
+int				fps = 0;
+__int64			frameTimeOld = 0;
+double			frameTime;
+bool			paused = false;
+
+///////////////**************new**************////////////////////
+// FPS Camera
 XMVECTOR	 				g_CamPosition;
 XMVECTOR	 				g_CamTarget;
 XMVECTOR	 				g_CamUp;
-XMMATRIX	 				g_Rotation;
-XMMATRIX	 				g_Scale;
-XMMATRIX	 				g_Translation;
-float	 					g_Rot = 0.01f; // keep track of rotation
 
-// Timer
-double countsPerSecond = 0.0;
-__int64 CounterStart = 0;
+XMVECTOR g_DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+XMVECTOR g_DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+XMVECTOR g_DefaultUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+XMVECTOR g_CamForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+XMVECTOR g_CamRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
 
-int frameCount = 0;
-int fps = 0;
+XMMATRIX g_CamRotationMatrix;
+XMMATRIX g_GroundWorld;
 
-__int64 frameTimeOld = 0;
-double frameTime;
+float g_CamMoveLeftRight = 0.0f;
+float g_CamMoveBackForward = 0.0f;
 
-bool paused = false;
+float g_CamPitch = 0.0f;	// 绕x轴旋转的角度
+float g_CamYaw = 0.0f;	// 绕y轴旋转的角度
+///////////////**************new**************////////////////////
+
 
 //--------------------------------------------------------------------------------------
 // Forward declarations
@@ -213,18 +216,18 @@ void StartTimer();
 double GetTime();
 double GetFrameTime();
 void PauseTimer();
-
 bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int width, int height, bool windowed);
 int messageloop();
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
 bool InitD2D_D3D101_DWrite(IDXGIAdapter1 *Adapter);
 bool InitD2DScreenTexture();
-
-///////////////**************new**************////////////////////
 bool InitDirectInput(HINSTANCE hInstance);
 void DetectInput(double time);
+
 ///////////////**************new**************////////////////////
+void UpdateCamera();
+///////////////**************new**************////////////////////
+
 
 //--------------------------------------------------------------------------------------
 // Entry point to the program
@@ -313,7 +316,7 @@ bool InitializeWindow(HINSTANCE hInstance,
 	g_hWnd = CreateWindowEx(
 		NULL,
 		g_WndClassName,
-		L"PointLights",
+		L"FirstPersonCamera",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		width, height,
@@ -414,7 +417,9 @@ bool InitializeDirect3d11App(HINSTANCE hInstance)
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 1;
 	swapChainDesc.OutputWindow = g_hWnd;
-	swapChainDesc.Windowed = TRUE;
+	///////////////**************new**************////////////////////
+	swapChainDesc.Windowed = false;
+	///////////////**************new**************////////////////////
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 	swapChainDesc.Flags = 0;
 
@@ -645,10 +650,8 @@ bool InitScene()
 	HR(g_hr, "D3DX11CompileFromFile");
 	g_hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_5_0", 0, 0, 0, &g_pPS_Buffer, 0, 0);
 	HR(g_hr, "D3DX11CompileFromFile");
-	///////////////**************new**************////////////////////
 	g_hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "D2D_PS", "ps_5_0", 0, 0, 0, &g_pD2D_PS_Buffer, 0, 0);
 	HR(g_hr, "D3DX11CompileFromFile");
-	///////////////**************new**************////////////////////
 
 	// Create the Shader Objects
 	g_hr = g_pd3d11Device->CreateVertexShader(g_pVS_Buffer->GetBufferPointer(), g_pVS_Buffer->GetBufferSize(), NULL, &g_pVS);
@@ -728,6 +731,24 @@ bool InitScene()
 		20, 22, 23
 	};
 
+	///////////////**************new**************////////////////////
+	Vertex groundVertices[] =
+	{
+		// Bottom Face
+		Vertex(-1.0f, -1.0f, -1.0f, 100.0f, 100.0f, 0.0f, 1.0f, 0.0f),
+		Vertex(1.0f, -1.0f, -1.0f,   0.0f, 100.0f, 0.0f, 1.0f, 0.0f),
+		Vertex(1.0f, -1.0f,  1.0f,   0.0f,   0.0f, 0.0f, 1.0f, 0.0f),
+		Vertex(-1.0f, -1.0f,  1.0f, 100.0f,   0.0f, 0.0f, 1.0f, 0.0f),
+	};
+
+	DWORD groundIndices[] = 
+	{
+		0,  2,  1,
+		0,  3,  2,
+	};
+	///////////////**************new**************////////////////////
+
+
 	// Create the index buffer
 	D3D11_BUFFER_DESC indexBufferDesc;
 	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
@@ -743,8 +764,16 @@ bool InitScene()
 	ZeroMemory(&indexBufferData, sizeof(indexBufferData));
 
 	indexBufferData.pSysMem = indices;
-	g_hr = g_pd3d11Device->CreateBuffer(&indexBufferDesc, &indexBufferData, &g_pSquareIndexBuffer);
+	g_hr = g_pd3d11Device->CreateBuffer(&indexBufferDesc, &indexBufferData, &g_pCubeIndexBuffer);
 	HR(g_hr, "g_pd3d11Device->CreateBuffer");
+
+	///////////////**************new**************////////////////////
+	indexBufferDesc.ByteWidth = sizeof(groundIndices);
+	indexBufferData.pSysMem = groundIndices;
+	g_hr = g_pd3d11Device->CreateBuffer(&indexBufferDesc, &indexBufferData, &g_pGroundIndexBuffer);
+	HR(g_hr, "g_pd3d11Device->CreateBuffer");
+	///////////////**************new**************////////////////////
+
 
 	// Create the vertex buffer
 	D3D11_BUFFER_DESC vertexBufferDesc;
@@ -761,8 +790,15 @@ bool InitScene()
 	ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
 
 	vertexBufferData.pSysMem = vertices;
-	g_hr = g_pd3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &g_pSquareVertBuffer);
+	g_hr = g_pd3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &g_pCubeVertBuffer);
 	HR(g_hr, "g_pd3d11Device->CreateBuffer");
+
+	///////////////**************new**************////////////////////
+	vertexBufferDesc.ByteWidth = sizeof(groundVertices);
+	vertexBufferData.pSysMem = groundVertices;
+	g_hr = g_pd3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &g_pGroundVertBuffer);;
+	HR(g_hr, "g_pd3d11Device->CreateBuffer");
+	///////////////**************new**************////////////////////
 
 	// Create the Input Layout
 	g_hr = g_pd3d11Device->CreateInputLayout(layout, numElements, g_pVS_Buffer->GetBufferPointer(),
@@ -825,6 +861,9 @@ bool InitScene()
 	// Load the Texture from a file
 	g_hr = D3DX11CreateShaderResourceViewFromFile(g_pd3d11Device, L"braynzar.jpg", NULL, NULL, &g_pCubeTexture, NULL);
 	HR(g_hr, "D3DX11CreateShaderResourceViewFromFile");
+	g_hr = D3DX11CreateShaderResourceViewFromFile(g_pd3d11Device, L"grass.jpg", NULL, NULL, &g_pGroundTexture, NULL);
+	HR(g_hr, "D3DX11CreateShaderResourceViewFromFile");
+	
 
 	// Describe the Sample State
 	D3D11_SAMPLER_DESC sampDesc;
@@ -840,7 +879,11 @@ bool InitScene()
 	// Create Sampler State
 	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pCubesTexSamplerState);
 	HR(g_hr, "g_pd3d11Device->CreateSamplerState");
-
+	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pGroundTexSamplerState);
+	HR(g_hr, "g_pd3d11Device->CreateSamplerState");
 
 	// Define our blending equation and create it.
 	D3D11_RENDER_TARGET_BLEND_DESC rtbd;
@@ -885,9 +928,9 @@ bool InitScene()
 	HR(g_hr, "g_pd3d11Device->CreateRasterizerState");
 
 	// Define the light
-	g_light.pos = XMFLOAT3(0.0f, 0.0f, 0.0f);
-	g_light.range = 100.0f;
-	g_light.att = XMFLOAT3(0.0f, 0.2f, 0.0f);
+	///////////////**************new**************////////////////////
+	g_light.dir = XMFLOAT3(0.0f, 1.0f, 0.0f);
+	///////////////**************new**************////////////////////
 	g_light.ambient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
 	g_light.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	// ===aha===
@@ -897,7 +940,6 @@ bool InitScene()
 	return true;
 }
 
-///////////////**************new**************////////////////////
 //--------------------------------------------------------------------------------------
 // Init direct input
 //--------------------------------------------------------------------------------------
@@ -944,53 +986,114 @@ void DetectInput(double time)
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
 	if(keyboardState[DIK_ESCAPE] & 0x80)
+	{
 		PostMessage(g_hWnd, WM_DESTROY, 0, 0);
+	}
 
-	if(keyboardState[DIK_LEFT] & 0x80)
-	{
-		rotz -= 1.0f * time;
-	}
-	if(keyboardState[DIK_RIGHT] & 0x80)
-	{
-		rotz += 1.0f * time;
-	}
-	if(keyboardState[DIK_UP] & 0x80)
-	{
-		rotx += 1.0f * time;
-	}
-	if(keyboardState[DIK_DOWN] & 0x80)
-	{
-		rotx -= 1.0f * time;
-	}
-	if(mouseCurrState.lX != mouseLastState.lX)
-	{
-		//scaleX -= (mouseCurrState.lX * 0.001f);
-		scaleX -= mouseCurrState.lX  * time;
-	}
-	if(mouseCurrState.lY != mouseLastState.lY)
-	{
-		//scaleY -= (mouseCurrState.lY * 0.001f);
-		scaleY -= mouseCurrState.lY * time;
-	}
+	// Update g_Fov
 	if(mouseCurrState.lZ != mouseLastState.lZ) // use mouse wheel to zoom in and out of the scene
 	{
 		g_Fov -= mouseCurrState.lZ * time * 0.1f;
 	}
 
-	if(rotx > 6.28)
-		rotx -= 6.28;
-	else if(rotx < 0)
-		rotx = 6.28 + rotx;
+	// Transform Cubes
+	if(keyboardState[DIK_LEFT] & 0x80)
+	{
+		g_rotz -= 1.0f * time;
+	}
+	if(keyboardState[DIK_RIGHT] & 0x80)
+	{
+		g_rotz += 1.0f * time;
+	}
+	if(keyboardState[DIK_UP] & 0x80)
+	{
+		g_rotx += 1.0f * time;
+	}
+	if(keyboardState[DIK_DOWN] & 0x80)
+	{
+		g_rotx -= 1.0f * time;
+	}
+	if(g_rotx > 6.28)
+		g_rotx -= 6.28;
+	else if(g_rotx < 0)
+		g_rotx = 6.28 + g_rotx;
+	if(g_rotz > 6.28)
+		g_rotz -= 6.28;
+	else if(g_rotz < 0)
+		g_rotz = 6.28 + g_rotz;
+	//if(mouseCurrState.lX != mouseLastState.lX)
+	//{
+	//	//scaleX -= (mouseCurrState.lX * 0.001f);
+	//	scaleX -= mouseCurrState.lX  * time;
+	//}
+	//if(mouseCurrState.lY != mouseLastState.lY)
+	//{
+	//	//scaleY -= (mouseCurrState.lY * 0.001f);
+	//	scaleY -= mouseCurrState.lY * time;
+	//}
 
-	if(rotz > 6.28)
-		rotz -= 6.28;
-	else if(rotz < 0)
-		rotz = 6.28 + rotz;
+	///////////////**************new**************////////////////////
+	// Move and Rotate Camera
+	float speed = 15.0f * time;
+	if(keyboardState[DIK_A] & 0x80)
+	{
+		g_CamMoveLeftRight -= speed;
+	}
+	if(keyboardState[DIK_D] & 0x80)
+	{
+		g_CamMoveLeftRight += speed;
+	}
+	if(keyboardState[DIK_W] & 0x80)
+	{
+		g_CamMoveBackForward += speed;
+	}
+	if(keyboardState[DIK_S] & 0x80)
+	{
+		g_CamMoveBackForward -= speed;
+	}
+	if((mouseCurrState.lX != mouseLastState.lX) || (mouseCurrState.lY != mouseLastState.lY))
+	{
+		g_CamPitch += mouseLastState.lY * 0.001f;
+		g_CamYaw += mouseLastState.lX * 0.001f;
+	}
+
+	UpdateCamera();
+	///////////////**************new**************////////////////////
 
 	mouseLastState = mouseCurrState;
 	return;
 }
-///////////////**************new**************////////////////////
+
+//--------------------------------------------------------------------------------------
+// Update Camera, will be called every frame at the end of our DetectInput() function
+//--------------------------------------------------------------------------------------
+void UpdateCamera()
+{
+	g_CamRotationMatrix = XMMatrixRotationRollPitchYaw(g_CamPitch, g_CamYaw, 0.0f);
+	g_CamTarget = XMVector3TransformCoord(g_DefaultForward, g_CamRotationMatrix);
+	g_CamTarget = XMVector3Normalize(g_CamTarget);
+
+	XMMATRIX RotateYTempMatrix = XMMatrixRotationY(g_CamYaw);
+
+	// restrict camera to moving around on the X and Z plane.
+	g_CamRight = XMVector3TransformCoord(g_DefaultRight, RotateYTempMatrix);
+	g_CamUp = XMVector3TransformCoord(g_DefaultUp, RotateYTempMatrix);
+	g_CamForward = XMVector3TransformCoord(g_DefaultForward, RotateYTempMatrix);
+
+	// camera can move freely
+	//g_CamRight = XMVector3Normalize(XMVector3TransformCoord(g_DefaultRight, g_CamRotationMatrix));
+	//g_CamUp = XMVector3Normalize(XMVector3TransformCoord(g_DefaultUp, g_CamRotationMatrix));
+	//g_CamForward = XMVector3Normalize(XMVector3TransformCoord(g_DefaultForward, g_CamRotationMatrix));
+
+	g_CamPosition += g_CamMoveLeftRight * g_CamRight;
+	g_CamPosition += g_CamMoveBackForward * g_CamForward;
+
+	g_CamMoveLeftRight = 0.0f;
+	g_CamMoveBackForward = 0.0f;
+
+	g_CamTarget = g_CamPosition + g_CamTarget;
+	g_View = XMMatrixLookAtLH(g_CamPosition, g_CamTarget, g_CamUp);
+}
 
 //--------------------------------------------------------------------------------------
 // Update Scene
@@ -1008,41 +1111,310 @@ void UpdateScene(double time)
 	// Reset cube1World
 	g_World1 = XMMatrixIdentity();
 
-	///////////////**************new**************////////////////////
 	// Define cube1's world space matrix
 	XMVECTOR rotXaxis = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
 	XMVECTOR rotYaxis = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	XMVECTOR rotZaxis = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
 	g_Rotation = XMMatrixRotationAxis(rotYaxis, g_Rot);
-	RotationX = XMMatrixRotationAxis(rotXaxis, rotx);
-	RotationZ = XMMatrixRotationAxis(rotZaxis, rotz);
+	g_RotationX = XMMatrixRotationAxis(rotXaxis, g_rotx);
+	g_RotationZ = XMMatrixRotationAxis(rotZaxis, g_rotz);
 	g_Translation = XMMatrixTranslation(4.0f, 0.0f, 0.0f);
 	g_Scale = XMMatrixScaling(0.5f, 0.5f, 0.5f);
 	// Set cube1's world space use the transformations
-	g_World1 = g_Scale * g_Translation * g_Rotation * RotationX * RotationZ; // Doing translation before rotation gives an orbit effect (公转)
-	///////////////**************new**************////////////////////
-
-	// Reset Lights Position
-	XMVECTOR lightVector = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	lightVector = XMVector3TransformCoord(lightVector, g_World1);
-	XMStoreFloat3(&g_light.pos, lightVector);
+	g_World1 = g_Scale * g_Translation * g_Rotation * g_RotationX * g_RotationZ; // Doing translation before rotation gives an orbit effect (公转)
 
 	// Reset cube2World
 	g_World2 = XMMatrixIdentity();
 
-	///////////////**************new**************////////////////////
 	// Define cube2's world space matrix
 	g_Rotation = XMMatrixRotationAxis(rotYaxis, -g_Rot);
-	g_Scale = XMMatrixScaling(scaleX, scaleY, 1.0f);
-	///////////////**************new**************////////////////////
+	g_Scale = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 
 	// Set cube2's world space matrix
 	g_World2 = g_Scale * g_Rotation;
 
-	///////////////**************new**************////////////////////
 	// Reset projection
 	g_Projection = XMMatrixPerspectiveFovLH(g_Fov * 3.14f, (float)g_Width / g_Height, 1.0f, 1000.0f);
+
 	///////////////**************new**************////////////////////
+	g_GroundWorld = XMMatrixIdentity();
+	g_Scale = XMMatrixScaling(500.0f, 1.0f, 500.0f);
+	g_Translation = XMMatrixTranslation(0.0f, -0.1f, 0.0f);
+	g_GroundWorld = g_Scale;
+	///////////////**************new**************////////////////////
+}
+
+//--------------------------------------------------------------------------------------
+// Draw Scene
+//--------------------------------------------------------------------------------------
+void DrawScene()
+{
+	float bgColor[4] = { 0.0f, 0.1f, 0.1f, 1.0f };
+	g_pd3d11DevCon->ClearRenderTargetView(g_pRenderTargetView, bgColor);
+	g_pd3d11DevCon->ClearDepthStencilView(g_pDepthStencilView,
+										  D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f,
+										  0);  // Clear the depth/stencil view every frame!!!
+
+	g_CBPerFrame.light = g_light;
+	// ===aha===
+	XMStoreFloat3(&g_CBPerFrame.camWorldPos, g_CamPosition);
+	// ===aha===
+	g_pd3d11DevCon->UpdateSubresource(g_pCBPerFrameBuffer, 0, 0, &g_CBPerFrame, 0, 0);
+	g_pd3d11DevCon->PSSetConstantBuffers(0, 1, &g_pCBPerFrameBuffer);
+
+	// Reset Vertex and Pixel Shaders
+	g_pd3d11DevCon->VSSetShader(g_pVS, 0, 0);
+	g_pd3d11DevCon->PSSetShader(g_pPS, 0, 0);
+
+	// Set the default blend state (no blending) for opaque objects
+	g_pd3d11DevCon->OMSetBlendState(0, 0, 0xffffffff); // 多重采样最多支持32个采样源, 参数 0xffffffff 表示不屏蔽任何采样员
+
+	// Render opaque objects here
+
+	// Set the cubes index buffer and vertex buffer before rendering (因为存在两个 index/vertex buffer, 另一个用来渲染字体, 故需要实时切换)
+	g_pd3d11DevCon->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pCubeVertBuffer, &stride, &offset);
+
+	// Draw the first cube
+	g_WVP = g_World1 * g_View * g_Projection;
+	g_CBPerObj.World = XMMatrixTranspose(g_World1);
+	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
+	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
+	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
+	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
+
+	// Draw the second cube
+	g_WVP = g_World2 * g_View * g_Projection;
+	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
+	g_CBPerObj.World = XMMatrixTranspose(g_World2);
+	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
+	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
+	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
+
+	///////////////**************new**************////////////////////
+	// Draw Ground
+	g_pd3d11DevCon->IASetIndexBuffer(g_pGroundIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	stride = sizeof(Vertex);
+	offset = 0;
+	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pGroundVertBuffer, &stride, &offset);
+
+	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
+	g_WVP = g_GroundWorld *g_View * g_Projection;
+	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
+	g_CBPerObj.World = XMMatrixTranspose(g_GroundWorld);
+	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
+	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pGroundTexture);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pGroundTexSamplerState);
+
+	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
+	g_pd3d11DevCon->DrawIndexed(6, 0, 0);
+	///////////////**************new**************////////////////////
+
+
+	RenderText(L" FPS: ", fps);
+
+	// Present the backbuffer to the screen
+	g_pSwapChain->Present(0, 0);
+}
+
+//--------------------------------------------------------------------------------------
+// Message Processing Loop
+//--------------------------------------------------------------------------------------
+int messageloop()
+{
+	MSG msg;
+	ZeroMemory(&msg, sizeof(MSG));
+	while(true)
+	{
+		BOOL PeekMessageL(
+			LPMSG lpMsg,
+			HWND hWnd,
+			UINT wMsgFilterMin,
+			UINT wMsgFilterMax,
+			UINT wRemoveMsg
+		);
+
+		if(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+		{
+			if(msg.message == WM_QUIT)
+				break;
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		else
+		{
+			// run game code
+
+			if(!paused)
+			{
+				++frameCount;
+				if(GetTime() > 1.0f)
+				{
+					fps = frameCount;
+					frameCount = 0;
+					StartTimer();
+				}
+				frameTime = GetFrameTime();
+				DetectInput(frameTime);
+				UpdateScene(frameTime);
+			}
+			else
+			{
+				// 暂停时, 将 frameTimeOld 置零
+				// 通过修改GetFrameTime()程序,保证继续运行时,物体接着现在的状态运动,而不是突变
+				frameTimeOld = 0;
+				DetectInput(0.0);
+				UpdateScene(0.0);
+			}
+
+			DrawScene();
+		}
+	}
+	return msg.wParam;
+}
+
+//--------------------------------------------------------------------------------------
+// Called every time the application receives a message
+//--------------------------------------------------------------------------------------
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch(msg)
+	{
+	case WM_KEYDOWN:
+		if(wParam == VK_ESCAPE)
+		{
+			//Release the windows allocated memory
+			DestroyWindow(hwnd);
+		}
+		else if(wParam == VK_PAUSE)
+		{
+			PauseTimer();
+		}
+		return 0;
+
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	}
+	return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+//--------------------------------------------------------------------------------------
+// Release Objects
+//--------------------------------------------------------------------------------------
+void ReleaseObjects()
+{
+	///////////////**************new**************////////////////////
+	g_pSwapChain->SetFullscreenState(false, NULL); // take our application out of fullscreen and into windowed mode before we actually start cleaning up.
+	PostMessage(g_hWnd, WM_DESTROY, 0, 0);
+	///////////////**************new**************////////////////////
+
+	// Release the COM Objects we created
+	g_pSwapChain->Release();
+	g_pd3d11Device->Release();
+	g_pd3d11DevCon->Release();
+	g_pRenderTargetView->Release();
+	g_pCubeVertBuffer->Release();
+	g_pCubeIndexBuffer->Release();
+	g_pVS->Release();
+	g_pPS->Release();
+	g_pVS_Buffer->Release();
+	g_pPS_Buffer->Release();
+	g_pVertLayout->Release();
+	g_pDepthStencilView->Release();
+	g_pDepthStencilBuffer->Release();
+	g_pCBPerObjectBuffer->Release();
+	g_pCBPerFrameBuffer->Release();
+	g_pD2D_PS->Release();
+	g_pD2D_PS_Buffer->Release();
+	g_pTransparency->Release();
+	g_pCCWcullMode->Release();
+	g_pCWcullMode->Release();
+	g_pNoCullMode->Release();
+
+	d3d101Device->Release();
+	keyedMutex11->Release();
+	keyedMutex10->Release();
+	D2DRenderTarget->Release();
+	Brush->Release();
+	BackBuffer11->Release();
+	sharedTex11->Release();
+	DWriteFactory->Release();
+	TextFormat->Release();
+	d2dTexture->Release();
+
+	DIKeyboard->Release();
+	DIMouse->Release();
+	DirectInput->Release();
+
+	///////////////**************new**************////////////////////
+	g_pGroundIndexBuffer->Release();
+	g_pGroundVertBuffer->Release();
+}
+
+//--------------------------------------------------------------------------------------
+// Start Timer
+//--------------------------------------------------------------------------------------
+void StartTimer()
+{
+	LARGE_INTEGER count;
+	QueryPerformanceFrequency(&count);
+	countsPerSecond = double(count.QuadPart);
+
+	QueryPerformanceCounter(&count);
+	CounterStart = count.QuadPart;
+}
+
+//--------------------------------------------------------------------------------------
+// Get Time
+//--------------------------------------------------------------------------------------
+double GetTime()
+{
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+	return double(currentTime.QuadPart - CounterStart) / countsPerSecond;
+}
+
+//--------------------------------------------------------------------------------------
+// Get Frame Time
+//--------------------------------------------------------------------------------------
+double GetFrameTime()
+{
+	LARGE_INTEGER currentTime;
+	__int64 tickCount;
+	QueryPerformanceCounter(&currentTime);
+
+	// 若 frameTimeOld 置为 0, 则说明刚由暂停状态恢复
+	if(frameTimeOld == 0)
+		frameTimeOld = currentTime.QuadPart;
+
+	tickCount = currentTime.QuadPart - frameTimeOld;
+	frameTimeOld = currentTime.QuadPart;
+
+	if(tickCount < 0.0f)
+		tickCount = 0.0f;
+
+	return double(tickCount) / countsPerSecond;
+}
+
+//--------------------------------------------------------------------------------------
+// Pause Timer 
+//--------------------------------------------------------------------------------------
+void PauseTimer()
+{
+	if(!paused)
+		paused = true;
+	else
+		paused = false;
 }
 
 //--------------------------------------------------------------------------------------
@@ -1127,264 +1499,4 @@ void RenderText(std::wstring text, int inInt)
 
 	//Draw the second cube
 	g_pd3d11DevCon->DrawIndexed(6, 0, 0);
-}
-
-//--------------------------------------------------------------------------------------
-// Draw Scene
-//--------------------------------------------------------------------------------------
-void DrawScene()
-{
-	float bgColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	g_pd3d11DevCon->ClearRenderTargetView(g_pRenderTargetView, bgColor);
-	g_pd3d11DevCon->ClearDepthStencilView(g_pDepthStencilView,
-										  D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f,
-										  0);  // Clear the depth/stencil view every frame!!!
-
-	///////////////**************new**************////////////////////
-	g_CBPerFrame.light = g_light;
-	// ===aha===
-	XMStoreFloat3(&g_CBPerFrame.camWorldPos, g_CamPosition);
-	// ===aha===
-	g_pd3d11DevCon->UpdateSubresource(g_pCBPerFrameBuffer, 0, 0, &g_CBPerFrame, 0, 0);
-	g_pd3d11DevCon->PSSetConstantBuffers(0, 1, &g_pCBPerFrameBuffer);
-
-	// Reset Vertex and Pixel Shaders
-	g_pd3d11DevCon->VSSetShader(g_pVS, 0, 0);
-	g_pd3d11DevCon->PSSetShader(g_pPS, 0, 0);
-	///////////////**************new**************////////////////////
-
-	// "fine-tune" the blending equation
-	float blendFactor[] = { 0.75f, 0.75f, 0.75f, 1.0f };
-
-	// Set the default blend state (no blending) for opaque objects
-	g_pd3d11DevCon->OMSetBlendState(0, 0, 0xffffffff); // 多重采样最多支持32个采样源, 参数 0xffffffff 表示不屏蔽任何采样员
-
-	// Render opaque objects here //
-	// ...
-
-	// Set the cubes index buffer and vertex buffer before rendering (因为存在两个 index/vertex buffer, 另一个用来渲染字体, 故需要实时切换)
-	g_pd3d11DevCon->IASetIndexBuffer(g_pSquareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-	UINT stride = sizeof(Vertex);
-	UINT offset = 0;
-	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pSquareVertBuffer, &stride, &offset);
-
-	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
-	g_WVP = g_World1 * g_View * g_Projection;
-	///////////////**************new**************////////////////////
-	g_CBPerObj.World = XMMatrixTranspose(g_World1);
-	///////////////**************new**************////////////////////
-	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
-	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
-	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
-	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
-
-	// Draw the first cube, render back face before front face
-	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
-	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
-
-	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
-	g_WVP = g_World2 * g_View * g_Projection;
-	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
-	///////////////**************new**************////////////////////
-	g_CBPerObj.World = XMMatrixTranspose(g_World2);
-	///////////////**************new**************////////////////////
-	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
-	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
-	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
-
-	// Draw the second cube
-	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
-	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
-
-	RenderText(L" FPS: ", fps);
-
-	// Present the backbuffer to the screen
-	g_pSwapChain->Present(0, 0);
-}
-
-//--------------------------------------------------------------------------------------
-// Message Processing Loop
-//--------------------------------------------------------------------------------------
-int messageloop()
-{
-	MSG msg;
-	ZeroMemory(&msg, sizeof(MSG));
-	while(true)
-	{
-		BOOL PeekMessageL(
-			LPMSG lpMsg,
-			HWND hWnd,
-			UINT wMsgFilterMin,
-			UINT wMsgFilterMax,
-			UINT wRemoveMsg
-		);
-
-		if(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-		{
-			if(msg.message == WM_QUIT)
-				break;
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-		else
-		{
-			// run game code
-
-			if(!paused)
-			{
-				++frameCount;
-				if(GetTime() > 1.0f)
-				{
-					fps = frameCount;
-					frameCount = 0;
-					StartTimer();
-				}
-				frameTime = GetFrameTime();
-				DetectInput(frameTime);
-				UpdateScene(frameTime);
-			}
-			else
-			{
-				// 暂停时, 将 frameTimeOld 置零
-				// 通过修改GetFrameTime()程序,保证继续运行时, GetFrameTime 不会瞬间得到一个很大的值
-				frameTimeOld = 0;
-				DetectInput(0.0);
-				UpdateScene(0.0);
-			}
-
-			DrawScene();
-		}
-	}
-	return msg.wParam;
-}
-
-//--------------------------------------------------------------------------------------
-// Called every time the application receives a message
-//--------------------------------------------------------------------------------------
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	switch(msg)
-	{
-	case WM_KEYDOWN:
-		if(wParam == VK_ESCAPE)
-		{
-			//Release the windows allocated memory
-			DestroyWindow(hwnd);
-		}
-		else if(wParam == VK_PAUSE)
-		{
-			PauseTimer();
-		}
-		return 0;
-
-	case WM_DESTROY:
-		PostQuitMessage(0);
-		return 0;
-	}
-	return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-
-//--------------------------------------------------------------------------------------
-// Release Objects
-//--------------------------------------------------------------------------------------
-void ReleaseObjects()
-{
-	// Release the COM Objects we created
-	g_pSwapChain->Release();
-	g_pd3d11Device->Release();
-	g_pd3d11DevCon->Release();
-	g_pRenderTargetView->Release();
-	g_pSquareVertBuffer->Release();
-	g_pSquareIndexBuffer->Release();
-	g_pVS->Release();
-	g_pPS->Release();
-	g_pVS_Buffer->Release();
-	g_pPS_Buffer->Release();
-	g_pVertLayout->Release();
-	g_pDepthStencilView->Release();
-	g_pDepthStencilBuffer->Release();
-	g_pCBPerObjectBuffer->Release();
-	g_pCBPerFrameBuffer->Release();
-	g_pD2D_PS->Release();
-	g_pD2D_PS_Buffer->Release();
-	g_pTransparency->Release();
-	g_pCCWcullMode->Release();
-	g_pCWcullMode->Release();
-	g_pNoCullMode->Release();
-
-	d3d101Device->Release();
-	keyedMutex11->Release();
-	keyedMutex10->Release();
-	D2DRenderTarget->Release();
-	Brush->Release();
-	BackBuffer11->Release();
-	sharedTex11->Release();
-	DWriteFactory->Release();
-	TextFormat->Release();
-	d2dTexture->Release();
-
-	///////////////**************new**************////////////////////
-	DIKeyboard->Release();
-	DIMouse->Release();
-	DirectInput->Release();
-	///////////////**************new**************////////////////////
-}
-
-//--------------------------------------------------------------------------------------
-// Start Timer
-//--------------------------------------------------------------------------------------
-void StartTimer()
-{
-	LARGE_INTEGER count;
-	QueryPerformanceFrequency(&count);
-
-	countsPerSecond = double(count.QuadPart);
-
-	QueryPerformanceCounter(&count);
-	CounterStart = count.QuadPart;
-}
-
-//--------------------------------------------------------------------------------------
-// Get Time
-//--------------------------------------------------------------------------------------
-double GetTime()
-{
-	LARGE_INTEGER currentTime;
-	QueryPerformanceCounter(&currentTime);
-	return double(currentTime.QuadPart - CounterStart) / countsPerSecond;
-}
-
-//--------------------------------------------------------------------------------------
-// Get Frame Time
-//--------------------------------------------------------------------------------------
-double GetFrameTime()
-{
-	LARGE_INTEGER currentTime;
-	__int64 tickCount;
-	QueryPerformanceCounter(&currentTime);
-
-	// 若 frameTimeOld 置为 0, 则说明刚由暂停状态恢复
-	if(frameTimeOld == 0)
-		frameTimeOld = currentTime.QuadPart;
-
-	tickCount = currentTime.QuadPart - frameTimeOld;
-	frameTimeOld = currentTime.QuadPart;
-
-	if(tickCount < 0.0f)
-		tickCount = 0.0f;
-
-	return double(tickCount) / countsPerSecond;
-}
-
-//--------------------------------------------------------------------------------------
-// Pause Timer 
-//--------------------------------------------------------------------------------------
-void PauseTimer()
-{
-	if(!paused)
-		paused = true;
-	else
-		paused = false;
 }

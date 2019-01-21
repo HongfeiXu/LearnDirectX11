@@ -39,6 +39,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "17_PointLights", "17_PointL
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "18_DirectInput", "18_DirectInput\18_DirectInput.vcxproj", "{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "19_FirstPersonCamera", "19_FirstPersonCamera\19_FirstPersonCamera.vcxproj", "{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -191,6 +193,14 @@ Global
 		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x64.Build.0 = Release|x64
 		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x86.ActiveCfg = Release|Win32
 		{70F13EC0-988B-4FC0-85C2-E1E0963D4E48}.Release|x86.Build.0 = Release|Win32
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Debug|x64.ActiveCfg = Debug|x64
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Debug|x64.Build.0 = Debug|x64
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Debug|x86.ActiveCfg = Debug|Win32
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Debug|x86.Build.0 = Debug|Win32
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Release|x64.ActiveCfg = Release|x64
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Release|x64.Build.0 = Release|x64
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Release|x86.ActiveCfg = Release|Win32
+		{C2E73068-4D34-4CDF-9FBE-9545BC1B2F36}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
