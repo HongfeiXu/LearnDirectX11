@@ -88,6 +88,26 @@ Direct Input uses relative mouse coordinates. What this means is it detects how 
 
 可以使用 Terragen 去制作天空盒所需的六张图片. 然后使用 DirectX Texture Tool 去制作一个 3D Texture.
 
+## Spot Light
+
+```
+struct SpotLight
+{
+    float3 pos;
+    float innerCutOff;
+    float3 dir;
+    float outerCutOff;
+    float3 att;
+    float range;
+
+    float4 ambient;
+    float4 diffuse;
+    float4 specular;
+};
+```
+
+结合了 [LearnOGL](https://learnopengl-cn.github.io/02%20Lighting/05%20Light%20casters/) 中的 innerCutOff, outerCutOff 和 [Brayzarsoft](https://www.braynzarsoft.net/viewtutorial/q16390-21-spotlights)的 range, 并且参考[OgreWiki](http://wiki.ogre3d.org/tiki-index.php?page=-Point+Light+Attenuation) 中的 attenuation 参数设置.
+
 ## D3D 与 OGL 的不同点
 
 1. 左手系. 向量叉乘按照左手螺旋定则.
