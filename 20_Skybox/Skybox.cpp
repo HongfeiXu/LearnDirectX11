@@ -52,6 +52,7 @@ struct CBPerObject
 {
 	XMMATRIX WVP;
 	XMMATRIX World; // 在世界空间计算光照效果
+	XMMATRIX WorldInvTranspose;	// World 的逆转置矩阵, 用于法线变换
 };
 
 struct Light
@@ -115,9 +116,9 @@ ID3D11Buffer*									g_pCBPerFrameBuffer;
 CBPerFrame										g_CBPerFrame; // send this structure to the Pixel Shader constant buffers
 Light											g_light;
 ID3D11ShaderResourceView*						g_pCubeTexture;
-ID3D11SamplerState*								g_pCubesTexSamplerState;
+ID3D11SamplerState*								g_pLinearClampSS;
 ID3D11ShaderResourceView*						g_pGroundTexture;
-ID3D11SamplerState*								g_pGroundTexSamplerState;
+ID3D11SamplerState*								g_pLinearWrapSS;
 ID3D11BlendState*								g_pTransparency; // for render text
 ID3D11RasterizerState*							g_pCCWcullMode;	 // counter clockwise culling
 ID3D11RasterizerState*							g_pCWcullMode;	 // clockwise culling
@@ -136,8 +137,18 @@ ID3D11DepthStencilState*						DSLessEqual;	// make sure the skybox is always beh
 
 int			NumSphereVertices;
 int			NumSphereFaces;
-XMMATRIX	sphereWorld;
+XMMATRIX	g_WorldSphere;	// 用于Skybox的采样
+XMMATRIX	g_WorldSphere2;	// 用于场景中的圆球
 ///////////////**************new**************////////////////////
+
+///////////////**************new**************////////////////////
+ID3D11VertexShader*								g_pReflectVS;
+ID3D11PixelShader*								g_pReflectPS;
+ID3D10Blob*										g_pReflectVS_Buffer;
+ID3D10Blob*										g_pReflectPS_Buffer;
+ID3D11SamplerState*								g_pAnistropicWrapSS; // 各向异性过滤模式
+///////////////**************new**************////////////////////
+
 
 // Simple Font
 ID3D10Device1*									d3d101Device;
@@ -173,8 +184,8 @@ float						g_Fov = 0.4f;	// To modify fov of camera
 
 // Transform
 XMMATRIX	 				g_WVP;
-XMMATRIX	 				g_World1;
-XMMATRIX	 				g_World2;
+XMMATRIX	 				g_WorldCube1;
+XMMATRIX	 				g_WorldCube2;
 XMMATRIX	 				g_View;
 XMMATRIX	 				g_Projection;
 XMMATRIX	 				g_Rotation;		// UpdateScene()
@@ -507,6 +518,10 @@ bool InitScene()
 	HR(g_hr, "D3DX11CompileFromFile");
 	g_hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "SKYMAP_PS", "ps_5_0", 0, 0, 0, &g_pSkyboxPS_Buffer, 0, 0);
 	HR(g_hr, "D3DX11CompileFromFile");
+	g_hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "REFLECT_VS", "vs_5_0", 0, 0, 0, &g_pReflectVS_Buffer, 0, 0);
+	HR(g_hr, "D3DX11CompileFromFile");
+	g_hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "REFLECT_PS", "ps_5_0", 0, 0, 0, &g_pReflectPS_Buffer, 0, 0);
+	HR(g_hr, "D3DX11CompileFromFile");
 	///////////////**************new**************////////////////////
 
 	// Create the Shader Objects
@@ -521,6 +536,10 @@ bool InitScene()
 	HR(g_hr, "g_pd3d11Device->CreateVertexShader");
 	g_hr = g_pd3d11Device->CreatePixelShader(g_pSkyboxPS_Buffer->GetBufferPointer(), g_pSkyboxPS_Buffer->GetBufferSize(), NULL, &g_pSkyboxPS);
 	HR(g_hr, "g_pd3d11Device->CreatePixelShader");
+	g_hr = g_pd3d11Device->CreateVertexShader(g_pReflectVS_Buffer->GetBufferPointer(), g_pReflectVS_Buffer->GetBufferSize(), NULL, &g_pReflectVS);
+	HR(g_hr, "g_pd3d11Device->CreateVertexShader");
+	g_hr = g_pd3d11Device->CreatePixelShader(g_pReflectPS_Buffer->GetBufferPointer(), g_pReflectPS_Buffer->GetBufferSize(), NULL, &g_pReflectPS);
+	HR(g_hr, "g_pd3d11Device->CreatePixelShader");
 	///////////////**************new**************////////////////////
 
 	// Set Vertex and Pixel Shaders
@@ -528,7 +547,7 @@ bool InitScene()
 	g_pd3d11DevCon->PSSetShader(g_pPS, 0, 0);
 
 	///////////////**************new**************////////////////////
-	CreateSphere(10, 10);
+	CreateSphere(20, 20);
 	///////////////**************new**************////////////////////
 
 	Vertex vertices[] =
@@ -715,7 +734,7 @@ bool InitScene()
 	loadSMInfo.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE; // tell D3D we will be loading a texture cube
 	
 	ID3D11Texture2D* SMTexture = 0;
-	g_hr = D3DX11CreateTextureFromFile(g_pd3d11Device, L"skymap.dds", NULL, NULL, (ID3D11Resource**)&SMTexture, NULL); // create a 2D texture from file
+	g_hr = D3DX11CreateTextureFromFile(g_pd3d11Device, L"skybox.dds", NULL, NULL, (ID3D11Resource**)&SMTexture, NULL); // create a 2D texture from file
 	HR(g_hr, "D3DX11CreateTextureFromFile");
 	
 	D3D11_TEXTURE2D_DESC SMTextureDesc;
@@ -743,13 +762,18 @@ bool InitScene()
 	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
 	// Create Sampler State
-	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pCubesTexSamplerState);
+	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pLinearClampSS);
 	HR(g_hr, "g_pd3d11Device->CreateSamplerState");
 	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
 	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pGroundTexSamplerState);
+	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pLinearWrapSS);
 	HR(g_hr, "g_pd3d11Device->CreateSamplerState");
+	sampDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+	sampDesc.MaxAnisotropy = 4;
+	g_hr = g_pd3d11Device->CreateSamplerState(&sampDesc, &g_pAnistropicWrapSS);
+	HR(g_hr, "g_pd3d11Device->CreateSamplerState");
+
 
 	// Define our blending equation and create it.
 	D3D11_RENDER_TARGET_BLEND_DESC rtbd;
@@ -777,6 +801,7 @@ bool InitScene()
 	ZeroMemory(&cmdesc, sizeof(D3D11_RASTERIZER_DESC));
 
 	cmdesc.FillMode = D3D11_FILL_SOLID;
+	//cmdesc.FillMode = D3D11_FILL_WIREFRAME;
 	cmdesc.CullMode = D3D11_CULL_BACK;
 	cmdesc.MultisampleEnable = TRUE; // 开启多重采样抗锯齿, 当 enable4xMsaa 也为 true 时有效.
 	cmdesc.FrontCounterClockwise = true;
@@ -793,12 +818,14 @@ bool InitScene()
 
 	///////////////**************new**************////////////////////
 	// Describe and Create Depth/Stencil Render State
+	// 允许使用深度值一致的像素进行替换深度/模板状态
+	// 该状态用于绘制天空盒, 因为深度值为 1.0 时 默认无法通过深度测试
 	D3D11_DEPTH_STENCIL_DESC dssDesc;
 	ZeroMemory(&dssDesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
 	dssDesc.DepthEnable = true;
 	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 	dssDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
-
+	dssDesc.StencilEnable = false;
 	g_hr = g_pd3d11Device->CreateDepthStencilState(&dssDesc, &DSLessEqual);
 	HR(g_hr, "g_pd3d11Device->CreateDepthStencilState");
 	///////////////**************new**************////////////////////
@@ -959,14 +986,14 @@ void UpdateCamera()
 	XMMATRIX RotateYTempMatrix = XMMatrixRotationY(g_CamYaw);
 
 	// restrict camera to moving around on the X and Z plane.
-	g_CamRight = XMVector3TransformCoord(g_DefaultRight, RotateYTempMatrix);
-	g_CamUp = XMVector3TransformCoord(g_DefaultUp, RotateYTempMatrix);
-	g_CamForward = XMVector3TransformCoord(g_DefaultForward, RotateYTempMatrix);
+	//g_CamRight = XMVector3TransformCoord(g_DefaultRight, RotateYTempMatrix);
+	//g_CamUp = XMVector3TransformCoord(g_DefaultUp, RotateYTempMatrix);
+	//g_CamForward = XMVector3TransformCoord(g_DefaultForward, RotateYTempMatrix);
 
 	// camera can move freely
-	//g_CamRight = XMVector3Normalize(XMVector3TransformCoord(g_DefaultRight, g_CamRotationMatrix));
-	//g_CamUp = XMVector3Normalize(XMVector3TransformCoord(g_DefaultUp, g_CamRotationMatrix));
-	//g_CamForward = XMVector3Normalize(XMVector3TransformCoord(g_DefaultForward, g_CamRotationMatrix));
+	g_CamRight = XMVector3Normalize(XMVector3TransformCoord(g_DefaultRight, g_CamRotationMatrix));
+	g_CamUp = XMVector3Normalize(XMVector3TransformCoord(g_DefaultUp, g_CamRotationMatrix));
+	g_CamForward = XMVector3Normalize(XMVector3TransformCoord(g_DefaultForward, g_CamRotationMatrix));
 
 	g_CamPosition += g_CamMoveLeftRight * g_CamRight;
 	g_CamPosition += g_CamMoveBackForward * g_CamForward;
@@ -991,9 +1018,8 @@ void UpdateScene(double time)
 		g_Rot = 0.0f;
 	}
 
-	// Reset cube1World
-	g_World1 = XMMatrixIdentity();
-
+	// Reset g_WorldCube1
+	g_WorldCube1 = XMMatrixIdentity();
 	// Define cube1's world space matrix
 	XMVECTOR rotXaxis = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
 	XMVECTOR rotYaxis = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
@@ -1004,33 +1030,40 @@ void UpdateScene(double time)
 	g_Translation = XMMatrixTranslation(4.0f, 0.0f, 0.0f);
 	g_Scale = XMMatrixScaling(0.5f, 0.5f, 0.5f);
 	// Set cube1's world space use the transformations
-	g_World1 = g_Scale * g_Translation * g_RotationY * g_RotationX * g_RotationZ; // Doing translation before rotation gives an orbit effect (公转)
+	g_WorldCube1 = g_Scale * g_Translation * g_RotationY * g_RotationX * g_RotationZ; // Doing translation before rotation gives an orbit effect (公转)
 
-	// Reset cube2World
-	g_World2 = XMMatrixIdentity();
-
+	// Reset g_WorldCube2
+	g_WorldCube2 = XMMatrixIdentity();
 	// Define cube2's world space matrix
 	g_Rotation = XMMatrixRotationAxis(rotYaxis, -g_Rot);
-	g_Scale = XMMatrixScaling(1.0f, 1.0f, 1.0f);
+	g_Scale = XMMatrixScaling(1.0f, 1.5f, 1.0f);
+	g_WorldCube2 = g_Scale * g_Rotation;
 
-	// Set cube2's world space matrix
-	g_World2 = g_Scale * g_Rotation;
-
-	// Reset projection
-	g_Projection = XMMatrixPerspectiveFovLH(g_Fov * 3.14f, (float)g_Width / g_Height, 1.0f, 1000.0f);
-
+	// Reset g_GroundWorld
 	g_GroundWorld = XMMatrixIdentity();
+	// Define ground's world space matrix
 	g_Scale = XMMatrixScaling(10.0f, 1.0f, 10.0f);
 	g_Translation = XMMatrixTranslation(0.0f, -0.1f, 0.0f);
 	g_GroundWorld = g_Scale * g_Translation;
 
 	///////////////**************new**************////////////////////
-	sphereWorld = XMMatrixIdentity();
+	// Reset g_WorldSphere, for Skybox
+	g_WorldSphere = XMMatrixIdentity();
+	// Define sphere's world space matrix
 	g_Scale = XMMatrixScaling(5.0f, 5.0f, 5.0f);
 	g_Translation = XMMatrixTranslation(XMVectorGetX(g_CamPosition), XMVectorGetY(g_CamPosition), XMVectorGetZ(g_CamPosition));
-	sphereWorld = g_Scale * g_Translation;
+	g_WorldSphere = g_Scale * g_Translation;
+
+	// Reset g_WorldSphere2, for Sphere
+	g_WorldSphere2 = XMMatrixIdentity();
+	// Define sphere's world space matrix
+	g_Scale = XMMatrixScaling(0.5f, 0.5f, 0.5f);
+	g_Translation = XMMatrixTranslation(0.0f, 2.0f, 0.0f);
+	g_WorldSphere2 = g_Scale * g_Translation;
 	///////////////**************new**************////////////////////
 
+	// Update projection
+	g_Projection = XMMatrixPerspectiveFovLH(g_Fov * 3.14f, (float)g_Width / g_Height, 1.0f, 1000.0f);
 }
 
 //--------------------------------------------------------------------------------------
@@ -1068,66 +1101,89 @@ void DrawScene()
 	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pCubeVertBuffer, &stride, &offset);
 
 	// Draw the first cube
-	g_WVP = g_World1 * g_View * g_Projection;
+	g_WVP = g_WorldCube1 * g_View * g_Projection;
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
-	g_CBPerObj.World = XMMatrixTranspose(g_World1);
+	g_CBPerObj.World = XMMatrixTranspose(g_WorldCube1);
+	XMVECTOR det = XMMatrixDeterminant(g_WorldCube1);
+	g_CBPerObj.WorldInvTranspose = XMMatrixInverse(&det, g_WorldCube1);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
 	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pLinearClampSS);
 	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
 	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
 
 	// Draw the second cube
-	g_WVP = g_World2 * g_View * g_Projection;
+	g_WVP = g_WorldCube2 * g_View * g_Projection;
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
-	g_CBPerObj.World = XMMatrixTranspose(g_World2);
+	g_CBPerObj.World = XMMatrixTranspose(g_WorldCube2);
+	det = XMMatrixDeterminant(g_WorldCube2);
+	g_CBPerObj.WorldInvTranspose = XMMatrixInverse(&det, g_WorldCube2);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
 	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pCubeTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pLinearClampSS);
 	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
 	g_pd3d11DevCon->DrawIndexed(36, 0, 0);
 
 	// Draw Ground
 	g_pd3d11DevCon->IASetIndexBuffer(g_pGroundIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pGroundVertBuffer, &stride, &offset);
-
 	g_WVP = g_GroundWorld * g_View * g_Projection;
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
 	g_CBPerObj.World = XMMatrixTranspose(g_GroundWorld);
+	det = XMMatrixDeterminant(g_GroundWorld);
+	g_CBPerObj.WorldInvTranspose = XMMatrixInverse(&det, g_GroundWorld);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
 	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pGroundTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pGroundTexSamplerState);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pLinearWrapSS);
 	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
 	g_pd3d11DevCon->DrawIndexed(6, 0, 0);
 
 	///////////////**************new**************////////////////////
-	// Set the new Vertex and Pixel Shaders
-	g_pd3d11DevCon->VSSetShader(g_pSkyboxVS, 0, 0);
-	g_pd3d11DevCon->PSSetShader(g_pSkyboxPS, 0, 0);
-
 	// Set the sphere index buffer and vertex buffer
 	g_pd3d11DevCon->IASetIndexBuffer(g_pSphereIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	g_pd3d11DevCon->IASetVertexBuffers(0, 1, &g_pSphereVertexBuffer, &stride, &offset);
 
-	// Set the World/View/Projection matrix, then send it to constant buffer in effect file
-	g_WVP = sphereWorld * g_View * g_Projection;
+	// Set the Vertex and Pixel Shaders
+	g_pd3d11DevCon->VSSetShader(g_pReflectVS, 0, 0);
+	g_pd3d11DevCon->PSSetShader(g_pReflectPS, 0, 0);
+
+	// Draw Sphere
+	g_WVP = g_WorldSphere2 * g_View * g_Projection;
 	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
-	g_CBPerObj.World = XMMatrixTranspose(sphereWorld);
+	g_CBPerObj.World = XMMatrixTranspose(g_WorldSphere2);
+	det = XMMatrixDeterminant(g_WorldSphere2);
+	g_CBPerObj.WorldInvTranspose = XMMatrixInverse(&det, g_WorldSphere2);
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
 	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pSkyboxTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
-	// Set the new depth/stencil and RS states
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pAnistropicWrapSS);
 	g_pd3d11DevCon->RSSetState(g_pNoCullMode);
-	g_pd3d11DevCon->OMSetDepthStencilState(DSLessEqual, 0);
-	// Draw the Sky
 	g_pd3d11DevCon->DrawIndexed(NumSphereFaces * 3, 0, 0);
 
-	// Set the default VS shader and depth/stencil state
+	// Set the Vertex and Pixel Shaders
+	g_pd3d11DevCon->VSSetShader(g_pSkyboxVS, 0, 0);
+	g_pd3d11DevCon->PSSetShader(g_pSkyboxPS, 0, 0);
+
+	// Draw Skybox
+	g_WVP = g_WorldSphere * g_View * g_Projection;
+	g_CBPerObj.WVP = XMMatrixTranspose(g_WVP);
+	g_CBPerObj.World = XMMatrixTranspose(g_WorldSphere);
+	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, 0, &g_CBPerObj, 0, 0);
+	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
+	g_pd3d11DevCon->PSSetShaderResources(0, 1, &g_pSkyboxTexture);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pLinearClampSS);
+	// Set the new depth/stencil and RS states
+	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
+	g_pd3d11DevCon->OMSetDepthStencilState(DSLessEqual, 0);
+	// Draw the Sky(天空盒最后渲染, 则那些被物体遮挡的部分不会被渲染出来, 避免重复渲染)
+	g_pd3d11DevCon->DrawIndexed(NumSphereFaces * 3, 0, 0);
+
+	// Set the VS/PS shader and depth/stencil state to default state
 	g_pd3d11DevCon->VSSetShader(g_pVS, 0, 0);
+	g_pd3d11DevCon->PSSetShader(g_pPS, 0, 0);
 	g_pd3d11DevCon->OMSetDepthStencilState(NULL, 0);
 	///////////////**************new**************////////////////////
 
@@ -1248,6 +1304,13 @@ void ReleaseObjects()
 	g_pSkyboxPS_Buffer->Release();
 	g_pSkyboxTexture->Release();
 	DSLessEqual->Release();
+	g_pReflectVS->Release();
+	g_pReflectPS->Release();
+	g_pReflectVS_Buffer->Release();
+	g_pReflectPS_Buffer->Release();
+	g_pAnistropicWrapSS->Release();
+	g_pLinearClampSS->Release();
+	g_pLinearWrapSS->Release();
 	///////////////**************new**************////////////////////
 	g_pVertLayout->Release();
 	g_pDepthStencilView->Release();
@@ -1496,7 +1559,6 @@ bool InitD2DScreenTexture()
 	return true;
 }
 
-
 //--------------------------------------------------------------------------------------
 // Render the Font
 //--------------------------------------------------------------------------------------
@@ -1573,7 +1635,7 @@ void RenderText(std::wstring text, int inInt)
 	g_pd3d11DevCon->UpdateSubresource(g_pCBPerObjectBuffer, 0, NULL, &g_CBPerObj, 0, 0);
 	g_pd3d11DevCon->VSSetConstantBuffers(0, 1, &g_pCBPerObjectBuffer);
 	g_pd3d11DevCon->PSSetShaderResources(0, 1, &d2dTexture);
-	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pCubesTexSamplerState);
+	g_pd3d11DevCon->PSSetSamplers(0, 1, &g_pLinearClampSS);
 
 	g_pd3d11DevCon->RSSetState(g_pCWcullMode);
 
@@ -1581,6 +1643,8 @@ void RenderText(std::wstring text, int inInt)
 	g_pd3d11DevCon->DrawIndexed(6, 0, 0);
 }
 
+// LatLines: 纬线个数
+// LongLines: 经线个数
 void CreateSphere(int LatLines, int LongLines)
 {
 	NumSphereVertices = ((LatLines - 2) * LongLines) + 2;
@@ -1617,6 +1681,12 @@ void CreateSphere(int LatLines, int LongLines)
 	vertices[NumSphereVertices - 1].pos.y = 0.0f;
 	vertices[NumSphereVertices - 1].pos.z = -1.0f;
 
+	// 局部空间下, 球上每一个顶点的法线方向和顶点坐标相同.
+	for(DWORD i = 0; i < vertices.size(); ++i)
+	{
+		vertices[i].normal = vertices[i].pos;
+	}
+
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 
@@ -1636,17 +1706,30 @@ void CreateSphere(int LatLines, int LongLines)
 	std::vector<DWORD> indices(NumSphereFaces * 3);
 
 	int k = 0;
+	// 这样构造会有一个孔
+	//for(DWORD l = 0; l < LongLines - 1; ++l)
+	//{
+	//	indices[k] = 0;
+	//	indices[k + 1] = l + 1;
+	//	indices[k + 2] = l + 2;
+	//	k += 3;
+	//}
+	//indices[k] = 0;
+	//indices[k + 1] = LongLines;
+	//indices[k + 2] = 1;
+	//k += 3;
+
 	for(DWORD l = 0; l < LongLines - 1; ++l)
 	{
 		indices[k] = 0;
-		indices[k + 1] = l + 1;
-		indices[k + 2] = l + 2;
+		indices[k + 2] = l + 1;
+		indices[k + 1] = l + 2;
 		k += 3;
 	}
 
 	indices[k] = 0;
-	indices[k + 1] = LongLines;
-	indices[k + 2] = 1;
+	indices[k + 2] = LongLines;
+	indices[k + 1] = 1;
 	k += 3;
 
 	for(DWORD i = 0; i < LatLines - 3; ++i)
@@ -1675,17 +1758,29 @@ void CreateSphere(int LatLines, int LongLines)
 		k += 6;
 	}
 
+	// 这样构造会有一个孔
+	//for(DWORD l = 0; l < LongLines - 1; ++l)
+	//{
+	//	indices[k] = NumSphereVertices - 1;
+	//	indices[k + 1] = (NumSphereVertices - 1) - (l + 1);
+	//	indices[k + 2] = (NumSphereVertices - 1) - (l + 2);
+	//	k += 3;
+	//}
+	//indices[k] = NumSphereVertices - 1;
+	//indices[k + 1] = (NumSphereVertices - 1) - LongLines;
+	//indices[k + 2] = NumSphereVertices - 2;
+
 	for(DWORD l = 0; l < LongLines - 1; ++l)
 	{
 		indices[k] = NumSphereVertices - 1;
-		indices[k + 1] = (NumSphereVertices - 1) - (l + 1);
-		indices[k + 2] = (NumSphereVertices - 1) - (l + 2);
+		indices[k + 2] = (NumSphereVertices - 1) - (l + 1);
+		indices[k + 1] = (NumSphereVertices - 1) - (l + 2);
 		k += 3;
 	}
 
 	indices[k] = NumSphereVertices - 1;
-	indices[k + 1] = (NumSphereVertices - 1) - LongLines;
-	indices[k + 2] = NumSphereVertices - 2;
+	indices[k + 2] = (NumSphereVertices - 1) - LongLines;
+	indices[k + 1] = NumSphereVertices - 2;
 
 	D3D11_BUFFER_DESC indexBufferDesc;
 	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
